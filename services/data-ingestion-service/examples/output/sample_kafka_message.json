@@ -1,0 +1,90 @@
+{
+  "kafka_metadata": {
+    "topic": "wildfire-fire-detections",
+    "partition": 2,
+    "offset": 184729,
+    "timestamp": "2025-01-04T01:30:47.284Z",
+    "key": "FIRMS_20250104_00142"
+  },
+  "message": {
+    "header": {
+      "message_id": "msg_20250104_013047_284_fire_det_142",
+      "source": "NASA_FIRMS",
+      "source_type": "satellite",
+      "ingestion_mode": "real_time",
+      "ingestion_timestamp": "2025-01-04T01:30:47.284Z",
+      "data_timestamp": "2025-01-04T01:30:00.000Z",
+      "schema_version": "1.0.0",
+      "avro_schema": "fire_detection_v1"
+    },
+    "payload": {
+      "detection_id": "FIRMS_20250104_00142",
+      "source": "NASA_FIRMS",
+      "satellite": "NOAA-20",
+      "instrument": "VIIRS",
+      "detection_time_utc": "2025-01-04T01:30:00.000Z",
+      "detection_time_pst": "2025-01-03T17:30:00.000Z",
+      "location": {
+        "latitude": 39.7596,
+        "longitude": -121.6219,
+        "coordinate_system": "WGS84",
+        "accuracy_meters": 375
+      },
+      "fire_characteristics": {
+        "brightness_kelvin": 328.4,
+        "brightness_t31_kelvin": 298.2,
+        "fire_radiative_power_mw": 45.3,
+        "scan": 1.2,
+        "track": 1.1,
+        "confidence": "high",
+        "confidence_score": 0.92,
+        "day_night": "night"
+      },
+      "quality_metrics": {
+        "validation_passed": true,
+        "quality_score": 0.96,
+        "data_completeness": 1.0,
+        "spatial_accuracy": "high",
+        "temporal_accuracy": "high",
+        "validation_errors": [],
+        "validation_warnings": []
+      },
+      "processing_metadata": {
+        "ingestion_latency_ms": 847,
+        "validation_latency_ms": 23,
+        "total_processing_ms": 870,
+        "duplicate_check": "passed",
+        "schema_validation": "passed",
+        "geographic_validation": "passed"
+      },
+      "enrichment": {
+        "county": "Butte",
+        "state": "California",
+        "fire_district": "CAL FIRE Butte Unit",
+        "nearest_city": "Paradise",
+        "distance_to_city_km": 2.3,
+        "population_within_5km": 12847,
+        "land_cover_type": "forest_mixed",
+        "elevation_meters": 533,
+        "slope_degrees": 12.4,
+        "aspect_degrees": 245
+      }
+    },
+    "routing": {
+      "destination_topics": [
+        "wildfire-fire-detections",
+        "wildfire-high-confidence-alerts"
+      ],
+      "storage_tier": "HOT",
+      "retention_days": 7,
+      "archive_after_days": 90
+    }
+  },
+  "producer_info": {
+    "service": "data-ingestion-service",
+    "version": "2.1.0",
+    "instance_id": "ingestion-worker-3",
+    "connector": "nasa_firms_connector",
+    "connector_version": "1.4.2"
+  }
+}

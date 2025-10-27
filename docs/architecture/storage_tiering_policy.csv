@@ -1,0 +1,46 @@
+Data Source,Classification,Hot Period (Days),Warm Period (Days),Cold Period (Days),Archive Period (Years),Storage Technology (Hot),Storage Technology (Warm),Storage Technology (Cold),Storage Technology (Archive),Estimated Size (GB/month),Monthly Cost (Hot),Monthly Cost (Warm),Monthly Cost (Cold),Monthly Cost (Archive),Access Pattern,Lifecycle Trigger,Compliance Retention
+firms_modis_terra,Internal,7,90,365,7,PostgreSQL + MinIO,S3 Standard,S3 Glacier Instant,S3 Glacier Deep Archive,15,0.35,0.32,0.06,0.01,Real-time queries (1000/day),Timestamp-based auto-transition,FISMA 7-year
+firms_modis_aqua,Internal,7,90,365,7,PostgreSQL + MinIO,S3 Standard,S3 Glacier Instant,S3 Glacier Deep Archive,15,0.35,0.32,0.06,0.01,Real-time queries (1000/day),Timestamp-based auto-transition,FISMA 7-year
+firms_viirs_snpp,Internal,7,90,365,7,PostgreSQL + MinIO,S3 Standard,S3 Glacier Instant,S3 Glacier Deep Archive,20,0.46,0.42,0.08,0.02,Real-time queries (1500/day),Timestamp-based auto-transition,FISMA 7-year
+firms_viirs_noaa20,Internal,7,90,365,7,PostgreSQL + MinIO,S3 Standard,S3 Glacier Instant,S3 Glacier Deep Archive,18,0.41,0.38,0.07,0.02,Real-time queries (1200/day),Timestamp-based auto-transition,FISMA 7-year
+firms_viirs_noaa21,Internal,7,90,365,7,PostgreSQL + MinIO,S3 Standard,S3 Glacier Instant,S3 Glacier Deep Archive,18,0.41,0.38,0.07,0.02,Real-time queries (1200/day),Timestamp-based auto-transition,FISMA 7-year
+firesat_detections,Internal,7,90,365,7,PostgreSQL + MinIO,S3 Standard,S3 Glacier Instant,S3 Glacier Deep Archive,25,0.58,0.53,0.10,0.02,Real-time queries (2000/day),Timestamp-based auto-transition,FISMA 7-year
+firesat_perimeters,Restricted,30,90,365,Permanent,PostgreSQL + MinIO,S3 Standard,S3 Glacier Instant,S3 Glacier Deep Archive (no expiry),40,0.92,0.84,0.16,0.04,Incident response (500/day),Manual review required for archival,FISMA Permanent
+firesat_thermal,Internal,7,90,365,7,MinIO,S3 Standard,S3 Glacier Instant,S3 Glacier Deep Archive,120,2.76,2.52,0.48,0.12,Analysis queries (100/day),Timestamp-based auto-transition,FISMA 7-year
+landsat_nrt,Internal,7,90,365,7,MinIO,S3 Standard,S3 Glacier Instant,S3 Glacier Deep Archive,500,11.50,10.50,2.00,0.50,Analysis queries (50/day),Timestamp-based auto-transition,FISMA 7-year
+sentinel3_slstr,Internal,7,90,365,7,MinIO,S3 Standard,S3 Glacier Instant,S3 Glacier Deep Archive,300,6.90,6.30,1.20,0.30,Analysis queries (80/day),Timestamp-based auto-transition,FISMA 7-year
+noaa_gfs_forecast,Public,7,30,N/A,1,PostgreSQL + MinIO,S3 Standard,N/A,S3 Glacier Deep Archive,50,1.15,1.05,N/A,0.05,Dashboard queries (5000/day),Timestamp-based auto-transition,NIST 1-year
+noaa_nam_forecast,Public,7,30,N/A,1,PostgreSQL + MinIO,S3 Standard,N/A,S3 Glacier Deep Archive,35,0.81,0.74,N/A,0.03,Dashboard queries (3000/day),Timestamp-based auto-transition,NIST 1-year
+noaa_alerts_active,Restricted,30,90,365,Permanent,PostgreSQL + Redis,S3 Standard,S3 Glacier Instant,S3 Glacier Deep Archive (no expiry),5,0.12,0.11,0.02,0.005,Real-time alerts (10000/day),Manual review required for archival,FISMA Permanent
+era5_reanalysis,Public,7,90,365,Permanent,PostgreSQL,S3 Standard,S3 Glacier Instant,S3 Glacier Deep Archive (no expiry),100,2.30,2.10,0.40,0.10,Research queries (200/day),Timestamp-based auto-transition,Climate research permanent
+metar_observations,Public,7,30,90,1,InfluxDB,S3 Standard,S3 Glacier Instant,S3 Glacier Deep Archive,10,0.23,0.21,0.04,0.01,Dashboard queries (1000/day),Timestamp-based auto-transition,NIST 1-year
+airnow_observations,Public,7,30,90,1,InfluxDB,S3 Standard,S3 Glacier Instant,S3 Glacier Deep Archive,8,0.18,0.17,0.03,0.008,Dashboard queries (800/day),Timestamp-based auto-transition,NIST 1-year
+purpleair_sensors,Internal,7,30,90,1,InfluxDB,S3 Standard,S3 Glacier Instant,S3 Glacier Deep Archive,12,0.28,0.25,0.05,0.01,Dashboard queries (500/day),Timestamp-based auto-transition,NIST 1-year
+iot_weather_stations,Internal,7,30,90,1,InfluxDB,S3 Standard,S3 Glacier Instant,S3 Glacier Deep Archive,20,0.46,0.42,0.08,0.02,Dashboard queries (300/day),Timestamp-based auto-transition,NIST 1-year
+iot_soil_moisture,Internal,7,30,90,1,InfluxDB,S3 Standard,S3 Glacier Instant,S3 Glacier Deep Archive,15,0.35,0.32,0.06,0.015,Dashboard queries (200/day),Timestamp-based auto-transition,NIST 1-year
+TOTAL,,,,,,,,,1326,30.52,27.91,5.30,1.32,,,
+
+Storage Tier Pricing (per GB/month):
+Hot (PostgreSQL/MinIO on-prem),0.023
+Warm (S3 Standard),0.021
+Cold (S3 Glacier Instant Retrieval),0.004
+Archive (S3 Glacier Deep Archive),0.00099
+
+Retrieval Pricing (per GB):
+Hot (PostgreSQL/MinIO),0.00
+Warm (S3 Standard),0.00
+Cold (S3 Glacier Instant Retrieval),0.03
+Archive (S3 Glacier Deep Archive - 12hr retrieval),0.02
+
+Storage Tier SLA:
+Hot,<100ms read latency
+Warm,<500ms read latency
+Cold,<1000ms read latency (instant retrieval)
+Archive,12-48 hours retrieval time
+
+Lifecycle Transition Rules:
+Rule 1,Transition to Warm after Hot period expires (automated via S3 Lifecycle Policy)
+Rule 2,Transition to Cold after Warm period expires (automated via S3 Lifecycle Policy)
+Rule 3,Transition to Archive after Cold period expires (automated via S3 Lifecycle Policy)
+Rule 4,Legal Hold: Suspend all transitions if compliance flag set
+Rule 5,Manual Override: Fire Chief can request expedited retrieval from Archive ($0.10/GB)

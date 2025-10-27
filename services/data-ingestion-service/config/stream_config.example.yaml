@@ -1,0 +1,244 @@
+# StreamManager Configuration Example
+# Complete configuration for refactored streaming architecture
+
+# Kafka Producer Configuration
+kafka:
+  bootstrap_servers: "localhost:9092"
+  client_id: "wildfire-stream-manager"
+  compression_type: "gzip"  # gzip, snappy, lz4, zstd
+  batch_size: 500
+  linger_ms: 100
+  max_retries: 3
+  retry_backoff_base: 2.0
+
+# Throttling and Backpressure Configuration
+throttling:
+  enabled: true
+  min_send_rate: 1.0        # messages/second
+  max_send_rate: 1000.0
+  target_consumer_lag: 1000 # target max lag
+  critical_consumer_lag: 5000
+  adjustment_factor: 1.5    # exponential backoff factor
+  window_size_seconds: 60
+  metric_sample_size: 100
+
+# Queue Configuration
+queue_max_size: 10000
+queue_overflow_strategy: "drop_oldest"  # drop_oldest, drop_newest, block
+
+# Feature Flags
+enable_dlq: true
+enable_metrics: true
+metrics_interval_seconds: 60
+
+# Kafka Topic Configurations
+topics:
+  wildfire-nasa-firms:
+    partitions: 4
+    replication_factor: 1
+    retention_ms: 604800000  # 7 days
+    compression_type: "gzip"
+
+  wildfire-weather-data:
+    partitions: 8  # Live-streaming weather data
+    replication_factor: 1
+    retention_ms: 259200000  # 3 days
+    compression_type: "gzip"
+
+  wildfire-iot-sensors:
+    partitions: 12  # High-volume IoT streams
+    replication_factor: 1
+    retention_ms: 604800000  # 7 days
+    compression_type: "lz4"
+
+  wildfire-weather-alerts:
+    partitions: 2
+    replication_factor: 1
+    retention_ms: 86400000  # 24 hours
+    compression_type: "snappy"
+
+  wildfire-satellite-imagery:
+    partitions: 1
+    replication_factor: 1
+    retention_ms: 86400000  # 24 hours
+    compression_type: "snappy"
+
+# Data Source Configurations
+sources:
+  # NASA FIRMS Fire Detection (Batch Mode)
+  firms_viirs_conus:
+    source_type: "nasa_firms"
+    enabled: true
+    topic: "wildfire-nasa-firms"
+    ingestion:
+      mode: "batch"
+      batch_size: 1000
+      schedule_interval_seconds: 3600  # Every hour
+    rate_limit_per_minute: 60
+    timeout_seconds: 30.0
+    cache_ttl_seconds: 300  # 5 minutes
+    custom_params:
+      region: "CONUS"
+      satellite: "VIIRS"
+
+  # NOAA Weather Stations (Continuous Streaming)
+  noaa_stations_california:
+    source_type: "noaa_weather"
+    enabled: true
+    topic: "wildfire-weather-data"
+    ingestion:
+      mode: "continuous_streaming"
+      polling_interval_seconds: 30
+      buffer_size: 100
+      buffer_flush_interval_seconds: 5
+    rate_limit_per_minute: 120
+    timeout_seconds: 30.0
+    cache_ttl_seconds: 60
+    custom_params:
+      state: "CA"
+      data_types: ["temperature", "humidity", "wind_speed"]
+
+  # NOAA Weather Alerts (Real-Time)
+  noaa_alerts_california:
+    source_type: "noaa_weather"
+    enabled: true
+    topic: "wildfire-weather-alerts"
+    ingestion:
+      mode: "real_time"
+      polling_interval_seconds: 30
+      max_records_per_poll: 100
+    rate_limit_per_minute: 60
+    timeout_seconds: 30.0
+    cache_ttl_seconds: 30
+    custom_params:
+      state: "CA"
+      alert_types: ["Red Flag Warning", "Fire Weather Watch"]
+
+  # PurpleAir IoT Sensors (Continuous Streaming)
+  purpleair_california:
+    source_type: "iot_sensor"
+    enabled: true
+    topic: "wildfire-iot-sensors"
+    ingestion:
+      mode: "continuous_streaming"
+      polling_interval_seconds: 60
+      buffer_size: 200
+      buffer_flush_interval_seconds: 10
+    rate_limit_per_minute: 100
+    timeout_seconds: 30.0
+    cache_ttl_seconds: 120  # 2 minutes
+    custom_params:
+      bounding_box: "32.5,-124.5,42.0,-114.1"  # California
+      fields: ["pm25", "humidity", "temperature"]
+
+  # IoT Environmental Sensors (Real-Time)
+  iot_wildfire_sensors:
+    source_type: "iot_sensor"
+    enabled: true
+    topic: "wildfire-iot-sensors"
+    ingestion:
+      mode: "real_time"
+      polling_interval_seconds: 300  # 5 minutes
+      max_records_per_poll: 500
+    rate_limit_per_minute: 60
+    timeout_seconds: 30.0
+    cache_ttl_seconds: 300
+    custom_params:
+      sensor_network: "wildfire_monitoring"
+      metrics: ["smoke", "temperature", "co2", "wind"]
+
+  # Satellite Imagery Metadata (Batch Mode)
+  satellite_landsat:
+    source_type: "satellite"
+    enabled: false  # Disabled by default
+    topic: "wildfire-satellite-imagery"
+    ingestion:
+      mode: "batch"
+      batch_size: 50
+      schedule_interval_seconds: 86400  # Daily
+    rate_limit_per_minute: 30
+    timeout_seconds: 60.0
+    cache_ttl_seconds: 3600  # 1 hour
+    custom_params:
+      satellite: "Landsat-8"
+      product: "thermal"
+      cloud_cover_max: 20
+
+# Custom Topic Mappings
+# Format: source_id -> topic_name
+custom_topic_mappings:
+  emergency_alert: "wildfire-alerts-critical"
+  test_data: "wildfire-test-data"
+
+# Priority Rules
+# Sources that should get priority processing
+priority_sources:
+  - "noaa_alerts_california"
+  - "emergency_alert"
+
+# Environment-Specific Overrides
+# These can be overridden via environment variables
+environment:
+  development:
+    kafka.bootstrap_servers: "localhost:9092"
+    throttling.enabled: false
+    enable_metrics: true
+
+  staging:
+    kafka.bootstrap_servers: "kafka-staging:9092"
+    throttling.enabled: true
+    throttling.target_consumer_lag: 2000
+
+  production:
+    kafka.bootstrap_servers: "kafka-prod-01:9092,kafka-prod-02:9092,kafka-prod-03:9092"
+    throttling.enabled: true
+    throttling.critical_consumer_lag: 3000
+    queue_max_size: 20000
+    enable_dlq: true
+    enable_metrics: true
+
+# Monitoring Configuration
+monitoring:
+  prometheus:
+    enabled: true
+    port: 9090
+    metrics_path: "/metrics"
+
+  grafana:
+    dashboards:
+      - "stream_manager_overview"
+      - "kafka_producer_metrics"
+      - "throttling_metrics"
+      - "queue_metrics"
+
+# Logging Configuration
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  format: "json"  # json, text
+  output: "stdout"  # stdout, file
+  file_path: "/var/log/stream_manager.log"
+
+# Health Check Configuration
+health_check:
+  enabled: true
+  interval_seconds: 30
+  timeout_seconds: 5
+  endpoints:
+    - "kafka_producer"
+    - "queue_manager"
+    - "throttle_manager"
+
+# Retry and Circuit Breaker Configuration
+reliability:
+  max_consecutive_failures: 10
+  circuit_breaker_timeout_seconds: 60
+  dlq_retry_attempts: 3
+  dlq_retry_delay_seconds: 300  # 5 minutes
+
+# Performance Tuning
+performance:
+  enable_batching: true
+  batch_timeout_seconds: 5.0
+  enable_compression: true
+  enable_caching: true
+  max_concurrent_streams: 50

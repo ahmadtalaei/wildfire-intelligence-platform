@@ -1,0 +1,293 @@
+# CAL FIRE Wildfire Intelligence Platform - MinIO Helm Chart Values
+# MinIO on-premises object storage for hot tier data
+
+## MinIO Configuration
+mode: distributed # distributed, standalone
+
+## Number of MinIO nodes (must be >= 4 for distributed mode)
+replicas: 4
+
+## Deployment Strategy
+DeploymentUpdate:
+  type: RollingUpdate
+  maxSurge: 100%
+  maxUnavailable: 0
+
+## StatefulSet Configuration
+StatefulSetUpdate:
+  updateStrategy: RollingUpdate
+
+## Image Configuration
+image:
+  repository: quay.io/minio/minio
+  tag: RELEASE.2023-10-25T06-33-25Z
+  pullPolicy: IfNotPresent
+
+## Image pull secrets (for private registry)
+imagePullSecrets: []
+
+## MinIO Command Arguments
+minioAPIPort: "9000"
+minioConsolePort: "9001"
+
+## Credentials
+rootUser: "admin"
+rootPassword: "" # Will be set via secret
+
+## Existing secret with credentials (recommended)
+existingSecret: "minio-credentials"
+
+## Service Configuration
+service:
+  type: ClusterIP # LoadBalancer for external access
+  port: 9000
+  consolePort: 9001
+  annotations: {}
+
+## Ingress Configuration
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+  hosts:
+    - minio.wildfire.calfire.ca.gov
+  tls:
+    - secretName: minio-tls
+      hosts:
+        - minio.wildfire.calfire.ca.gov
+
+## Console Ingress (MinIO Web UI)
+consoleIngress:
+  enabled: true
+  ingressClassName: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - minio-console.wildfire.calfire.ca.gov
+  tls:
+    - secretName: minio-console-tls
+      hosts:
+        - minio-console.wildfire.calfire.ca.gov
+
+## Persistence Configuration
+persistence:
+  enabled: true
+  storageClass: "local-storage" # Use local SSDs for performance
+  accessMode: ReadWriteOnce
+  size: 1Ti # 1 TB per node (4 TB total hot tier storage)
+
+## Number of drives per node (for distributed mode)
+drivesPerNode: 1
+
+## Resource Limits
+resources:
+  requests:
+    cpu: 2000m
+    memory: 4Gi
+  limits:
+    cpu: 4000m
+    memory: 8Gi
+
+## Node Selector (ensure MinIO runs on storage-optimized nodes)
+nodeSelector:
+  node-role.kubernetes.io/storage: "true"
+
+## Tolerations
+tolerations:
+  - key: "storage-node"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+
+## Affinity (anti-affinity to spread pods across nodes)
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+            - key: app
+              operator: In
+              values:
+                - minio
+        topologyKey: kubernetes.io/hostname
+
+## Security Context
+securityContext:
+  enabled: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  fsGroupChangePolicy: "OnRootMismatch"
+
+## Pod Security Context
+podSecurityContext:
+  enabled: true
+  runAsNonRoot: true
+
+## Environment Variables
+environment:
+  ## MinIO Server Configuration
+  MINIO_PROMETHEUS_AUTH_TYPE: "public"
+  MINIO_PROMETHEUS_URL: "http://prometheus:9090"
+  MINIO_BROWSER_REDIRECT_URL: "https://minio-console.wildfire.calfire.ca.gov"
+
+  ## Storage Configuration
+  MINIO_STORAGE_CLASS_STANDARD: "EC:2" # Erasure coding: 2 data + 2 parity (4 nodes)
+
+  ## Performance Tuning
+  MINIO_API_REQUESTS_MAX: "1000"
+  MINIO_API_REQUESTS_DEADLINE: "10s"
+
+  ## Healing Configuration
+  MINIO_HEAL_MAX_IO: "1000MiB"
+  MINIO_HEAL_MAX_SLEEP: "1s"
+
+  ## Compression (disabled for already-compressed data)
+  MINIO_COMPRESS_ENABLE: "off"
+
+  ## KMS Integration (for encryption at rest)
+  MINIO_KMS_KES_ENDPOINT: "https://kes.wildfire.calfire.ca.gov:7373"
+  MINIO_KMS_KES_KEY_NAME: "wildfire-minio-key"
+
+## MinIO Buckets to Auto-Create
+buckets:
+  - name: wildfire-hot-tier
+    policy: none # Use IAM policies instead
+    purge: false
+    versioning: true
+    objectlocking: false
+
+  - name: wildfire-backup
+    policy: none
+    purge: false
+    versioning: true
+    objectlocking: true # WORM compliance
+
+  - name: wildfire-temp
+    policy: none
+    purge: true # Auto-delete after 7 days
+    versioning: false
+    objectlocking: false
+
+## MinIO Policies
+policies:
+  - name: wildfire-ingestion-writeonly
+    statements:
+      - resources:
+          - 'arn:aws:s3:::wildfire-hot-tier/*'
+        actions:
+          - "s3:PutObject"
+          - "s3:DeleteObject"
+
+  - name: wildfire-analyst-readonly
+    statements:
+      - resources:
+          - 'arn:aws:s3:::wildfire-hot-tier/*'
+          - 'arn:aws:s3:::wildfire-backup/*'
+        actions:
+          - "s3:GetObject"
+          - "s3:ListBucket"
+
+## MinIO Users
+users:
+  - accessKey: data-ingestion-service
+    existingSecret: minio-ingestion-credentials
+    existingSecretKey: secretkey
+    policy: wildfire-ingestion-writeonly
+
+  - accessKey: fire-analyst
+    existingSecret: minio-analyst-credentials
+    existingSecretKey: secretkey
+    policy: wildfire-analyst-readonly
+
+## Service Monitor (Prometheus Operator)
+metrics:
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+    namespace: monitoring
+    additionalLabels:
+      prometheus: kube-prometheus
+
+## Network Policy
+networkPolicy:
+  enabled: true
+  allowExternal: true
+
+## Liveness and Readiness Probes
+livenessProbe:
+  httpGet:
+    path: /minio/health/live
+    port: 9000
+  initialDelaySeconds: 120
+  periodSeconds: 30
+  timeoutSeconds: 10
+  successThreshold: 1
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /minio/health/ready
+    port: 9000
+  initialDelaySeconds: 60
+  periodSeconds: 15
+  timeoutSeconds: 10
+  successThreshold: 1
+  failureThreshold: 3
+
+## Startup Probe (for slow-starting pods)
+startupProbe:
+  httpGet:
+    path: /minio/health/live
+    port: 9000
+  initialDelaySeconds: 0
+  periodSeconds: 10
+  timeoutSeconds: 10
+  successThreshold: 1
+  failureThreshold: 30
+
+## Pod Disruption Budget
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
+
+## Priority Class
+priorityClassName: "system-cluster-critical"
+
+## Lifecycle Hooks
+lifecycle:
+  postStart:
+    exec:
+      command:
+        - /bin/sh
+        - -c
+        - |
+          sleep 30
+          mc alias set local http://localhost:9000 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD
+          mc admin config set local heal max_io=1000MiB max_sleep=1s
+          mc admin service restart local
+
+## Additional Labels
+labels:
+  app: minio
+  component: storage
+  tier: hot
+  managed-by: helm
+
+## Additional Annotations
+annotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9000"
+  prometheus.io/path: "/minio/v2/metrics/cluster"
+
+## Backup Configuration (for disaster recovery)
+backup:
+  enabled: true
+  schedule: "0 2 * * *" # Daily at 2 AM
+  retention: 7 # Keep 7 daily backups
+  destination: "s3://wildfire-backup-us-west-2"

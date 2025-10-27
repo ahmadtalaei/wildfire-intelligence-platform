@@ -1,0 +1,184 @@
+{
+  "type": "record",
+  "name": "FireEventV2",
+  "namespace": "com.wildfire.events",
+  "doc": "Enhanced fire event with correlation metadata",
+  "fields": [
+    {
+      "name": "event_id",
+      "type": "string",
+      "doc": "Unique event identifier"
+    },
+    {
+      "name": "correlation_id",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Correlation ID for related events"
+    },
+    {
+      "name": "event_type",
+      "type": {
+        "type": "enum",
+        "name": "EventType",
+        "symbols": [
+          "FIRE_DETECTION",
+          "WEATHER_UPDATE",
+          "SENSOR_READING",
+          "EVACUATION_ORDER",
+          "RESOURCE_DISPATCH",
+          "CONTAINMENT_UPDATE"
+        ]
+      },
+      "doc": "Type of fire event"
+    },
+    {
+      "name": "timestamp",
+      "type": "long",
+      "logicalType": "timestamp-millis",
+      "doc": "Event timestamp in milliseconds since epoch"
+    },
+    {
+      "name": "location",
+      "type": {
+        "type": "record",
+        "name": "GeoLocation",
+        "fields": [
+          {"name": "latitude", "type": "double"},
+          {"name": "longitude", "type": "double"},
+          {"name": "altitude", "type": ["null", "double"], "default": null},
+          {"name": "accuracy", "type": ["null", "float"], "default": null},
+          {
+            "name": "grid_cell",
+            "type": ["null", "string"],
+            "default": null,
+            "doc": "Geographic grid cell for partitioning"
+          }
+        ]
+      },
+      "doc": "Geographic location of the event"
+    },
+    {
+      "name": "severity",
+      "type": "float",
+      "doc": "Event severity score (0.0 to 1.0)"
+    },
+    {
+      "name": "confidence",
+      "type": "float",
+      "doc": "Detection confidence (0.0 to 1.0)"
+    },
+    {
+      "name": "source",
+      "type": {
+        "type": "record",
+        "name": "EventSource",
+        "fields": [
+          {"name": "system", "type": "string", "doc": "Source system name"},
+          {"name": "sensor_id", "type": ["null", "string"], "default": null},
+          {"name": "satellite", "type": ["null", "string"], "default": null},
+          {"name": "api_endpoint", "type": ["null", "string"], "default": null}
+        ]
+      },
+      "doc": "Event source information"
+    },
+    {
+      "name": "fire_characteristics",
+      "type": ["null", {
+        "type": "record",
+        "name": "FireCharacteristics",
+        "fields": [
+          {"name": "temperature", "type": ["null", "float"], "default": null, "doc": "Fire temperature in Celsius"},
+          {"name": "frp", "type": ["null", "float"], "default": null, "doc": "Fire Radiative Power in MW"},
+          {"name": "brightness", "type": ["null", "float"], "default": null, "doc": "Brightness temperature"},
+          {"name": "scan_angle", "type": ["null", "float"], "default": null},
+          {"name": "track_angle", "type": ["null", "float"], "default": null},
+          {"name": "size", "type": ["null", "float"], "default": null, "doc": "Estimated fire size in hectares"},
+          {"name": "spread_rate", "type": ["null", "float"], "default": null, "doc": "Spread rate in m/s"}
+        ]
+      }],
+      "default": null,
+      "doc": "Detailed fire characteristics"
+    },
+    {
+      "name": "weather_conditions",
+      "type": ["null", {
+        "type": "record",
+        "name": "WeatherConditions",
+        "fields": [
+          {"name": "temperature", "type": ["null", "float"], "default": null},
+          {"name": "humidity", "type": ["null", "float"], "default": null},
+          {"name": "wind_speed", "type": ["null", "float"], "default": null},
+          {"name": "wind_direction", "type": ["null", "int"], "default": null},
+          {"name": "precipitation", "type": ["null", "float"], "default": null},
+          {"name": "pressure", "type": ["null", "float"], "default": null},
+          {"name": "fire_weather_index", "type": ["null", "float"], "default": null}
+        ]
+      }],
+      "default": null,
+      "doc": "Associated weather conditions"
+    },
+    {
+      "name": "impact_assessment",
+      "type": ["null", {
+        "type": "record",
+        "name": "ImpactAssessment",
+        "fields": [
+          {"name": "population_at_risk", "type": ["null", "int"], "default": null},
+          {"name": "structures_threatened", "type": ["null", "int"], "default": null},
+          {"name": "evacuation_zones", "type": ["null", {"type": "array", "items": "string"}], "default": null},
+          {"name": "critical_infrastructure", "type": ["null", {"type": "array", "items": "string"}], "default": null},
+          {"name": "estimated_damage", "type": ["null", "double"], "default": null, "doc": "Estimated damage in USD"}
+        ]
+      }],
+      "default": null,
+      "doc": "Impact assessment data"
+    },
+    {
+      "name": "processing_metadata",
+      "type": {
+        "type": "record",
+        "name": "ProcessingMetadata",
+        "fields": [
+          {"name": "ingestion_time", "type": "long", "logicalType": "timestamp-millis"},
+          {"name": "processing_time", "type": ["null", "long"], "default": null, "logicalType": "timestamp-millis"},
+          {"name": "latency_ms", "type": ["null", "int"], "default": null},
+          {"name": "processor_version", "type": "string", "default": "2.0.0"},
+          {"name": "quality_score", "type": ["null", "float"], "default": null},
+          {"name": "validation_status", "type": "string", "default": "PENDING"},
+          {"name": "anomaly_detected", "type": "boolean", "default": false},
+          {"name": "correlation_count", "type": "int", "default": 0}
+        ]
+      },
+      "doc": "Processing and quality metadata"
+    },
+    {
+      "name": "ml_predictions",
+      "type": ["null", {
+        "type": "record",
+        "name": "MLPredictions",
+        "fields": [
+          {"name": "fire_behavior", "type": ["null", "string"], "default": null},
+          {"name": "spread_direction", "type": ["null", "int"], "default": null, "doc": "Predicted spread direction in degrees"},
+          {"name": "containment_probability", "type": ["null", "float"], "default": null},
+          {"name": "escalation_risk", "type": ["null", "float"], "default": null},
+          {"name": "model_version", "type": ["null", "string"], "default": null},
+          {"name": "prediction_confidence", "type": ["null", "float"], "default": null}
+        ]
+      }],
+      "default": null,
+      "doc": "Machine learning predictions"
+    },
+    {
+      "name": "tags",
+      "type": ["null", {"type": "map", "values": "string"}],
+      "default": null,
+      "doc": "Flexible tags for categorization"
+    },
+    {
+      "name": "raw_data",
+      "type": ["null", "bytes"],
+      "default": null,
+      "doc": "Original raw data if needed"
+    }
+  ]
+}

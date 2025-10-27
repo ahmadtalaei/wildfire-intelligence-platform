@@ -1,0 +1,108 @@
+# Critical Alert Sources Configuration
+# Sources requiring <1s end-to-end latency for life safety
+# These sources bypass the queue system and use direct WebSocket → Kafka streaming
+
+critical_alert_sources:
+  # Life Safety Alerts
+  evacuation_alerts:
+    enabled: true
+    topic: wildfire-critical-alerts
+    max_latency_ms: 100
+    priority: CRITICAL
+    description: "Immediate evacuation orders for threatened areas"
+    websocket_url: "wss://alerts.calfire.ca.gov/evacuation/stream"
+    polling_fallback_interval: 5
+
+  first_responder_updates:
+    enabled: true
+    topic: wildfire-critical-alerts
+    max_latency_ms: 100
+    priority: CRITICAL
+    description: "Real-time updates for first responders in the field"
+    websocket_url: "wss://alerts.calfire.ca.gov/responder/stream"
+    polling_fallback_interval: 5
+
+  imminent_threat_detection:
+    enabled: true
+    topic: wildfire-critical-alerts
+    max_latency_ms: 50
+    priority: CRITICAL
+    description: "AI-detected imminent fire threats requiring immediate action"
+    websocket_url: "wss://ai.calfire.ca.gov/threats/stream"
+    polling_fallback_interval: 3
+
+  emergency_broadcast_system:
+    enabled: true
+    topic: wildfire-critical-alerts
+    max_latency_ms: 100
+    priority: CRITICAL
+    description: "Emergency broadcast messages for public safety"
+    websocket_url: "wss://ebs.calfire.ca.gov/broadcast/stream"
+    polling_fallback_interval: 5
+
+  critical_fire_alerts:
+    enabled: true
+    topic: wildfire-critical-alerts
+    max_latency_ms: 100
+    priority: CRITICAL
+    description: "Critical fire behavior changes (crowning, spotting, etc.)"
+    websocket_url: "wss://behavior.calfire.ca.gov/critical/stream"
+    polling_fallback_interval: 5
+
+  life_safety_warnings:
+    enabled: true
+    topic: wildfire-critical-alerts
+    max_latency_ms: 100
+    priority: CRITICAL
+    description: "Life safety warnings for trapped individuals"
+    websocket_url: "wss://safety.calfire.ca.gov/warnings/stream"
+    polling_fallback_interval: 3
+
+# WebSocket Configuration
+websocket_config:
+  ping_interval: 20
+  ping_timeout: 10
+  close_timeout: 10
+  reconnect_delay_base: 1
+  reconnect_delay_max: 60
+  heartbeat_interval: 30
+
+# Kafka Configuration for Critical Alerts
+kafka_config:
+  topic_name: wildfire-critical-alerts
+  partitions: 12  # Higher partition count for parallelism
+  replication_factor: 3  # Higher replication for critical data
+  min_insync_replicas: 2  # Ensure durability
+  acks: all  # Wait for all replicas
+  compression_type: none  # No compression for minimal latency
+  batch_size: 1  # Send immediately
+  linger_ms: 0  # No batching delay
+  max_in_flight_requests: 1  # Maintain ordering
+
+# Monitoring and Alerting
+monitoring:
+  latency_threshold_ms: 100
+  latency_critical_ms: 500
+  failure_threshold: 3
+  alert_channels:
+    - pagerduty
+    - email
+    - sms
+  metrics_export_interval: 10
+
+# Fallback Configuration
+fallback:
+  enabled: true
+  polling_interval_seconds: 5
+  max_retries: 3
+  retry_backoff_base: 2
+  timeout_seconds: 10
+
+# Performance Tuning
+performance:
+  enable_direct_path: true
+  bypass_queue: true
+  bypass_throttling: true
+  bypass_buffering: true
+  max_concurrent_alerts: 1000
+  memory_limit_mb: 512

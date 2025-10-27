@@ -1,0 +1,89 @@
+GeoTIFF Metadata Example - Landsat 9 Thermal Band
+===============================================
+
+File: LC09_L2SP_044033_20250104_20250104_02_T1_ST_B10.TIF
+Source: USGS Landsat 9 - Thermal Infrared Sensor (TIRS)
+Scene ID: LC09_L2SP_044033_20250104_20250104_02_T1
+Acquisition Date: 2025-01-04 18:45:32 UTC
+Path/Row: 044/033
+Processing Level: Level-2 Surface Temperature
+
+Spatial Information:
+-------------------
+Coordinate System: WGS 84 / UTM zone 10N
+EPSG Code: 32610
+Upper Left Corner:
+  - Easting: 492285.000 m
+  - Northing: 4398915.000 m
+  - Longitude: -121.6219°
+  - Latitude: 39.7596°
+Lower Right Corner:
+  - Easting: 726285.000 m
+  - Northing: 4164915.000 m
+  - Longitude: -119.2483°
+  - Latitude: 37.5821°
+
+Raster Dimensions:
+-----------------
+Rows: 7811
+Columns: 7801
+Pixel Size: 30m x 30m
+Total Size: 60,937,611 pixels
+
+Band Information:
+----------------
+Band 10 (Thermal Infrared):
+  - Wavelength: 10.6-11.2 μm
+  - Resolution: 100m (resampled to 30m)
+  - Data Type: Int16
+  - Valid Range: 0-65535
+  - Fill Value: 0
+  - Scale Factor: 0.00341802
+  - Offset: 149.0
+  - Units: Kelvin
+
+Temperature Conversion:
+  Surface Temperature (K) = (DN × 0.00341802) + 149.0
+  Surface Temperature (°C) = ((DN × 0.00341802) + 149.0) - 273.15
+
+Statistics for Scene:
+--------------------
+Minimum Temperature: 278.4 K (5.2°C)
+Maximum Temperature: 318.7 K (45.5°C)
+Mean Temperature: 295.3 K (22.1°C)
+Std Deviation: 8.4 K
+
+Hot Spot Detection:
+------------------
+Pixels > 310K (36.9°C): 2,847 pixels
+Pixels > 320K (46.9°C): 142 pixels (FIRE CANDIDATE)
+Largest Hot Spot:
+  - Center: -121.3456°, 39.5234°
+  - Peak Temperature: 337.2 K (64.0°C)
+  - Area: 18 pixels (16,200 m²)
+  - Confidence: HIGH
+
+Cloud Coverage:
+--------------
+Cloud Cover: 8.2%
+Cloud Shadow: 2.1%
+Snow/Ice: 0.3%
+Water: 4.7%
+Clear Land: 84.7%
+
+Quality Flags:
+-------------
+Radiometric Saturation: 0.02%
+Terrain Occlusion: 1.3%
+Dropped Pixels: 0
+Processing Quality: NOMINAL
+
+Fire Risk Assessment:
+--------------------
+Active Fire Pixels: 142
+Smoldering Areas: 28
+Historical Burn Scars: 1,247
+Vegetation Stress (NDVI < 0.3): 15.4% of scene
+
+Metadata Version: USGS_LPGS_2.8.0
+Product Generation Time: 2025-01-04T20:15:43Z

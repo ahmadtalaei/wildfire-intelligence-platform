@@ -1,0 +1,299 @@
+# =====================================================================
+# Data Retention Policies for Wildfire Intelligence Platform
+# =====================================================================
+# Purpose: Define automated lifecycle rules for all data types
+# Last Updated: 2025-10-08
+# =====================================================================
+
+# Global defaults
+defaults:
+  timezone: "America/Los_Angeles"  # PST/PDT
+  compression: "snappy"
+  parquet_row_group_size: 100000
+
+# Policy definitions by data source
+policies:
+  # ===================================================================
+  # FIRE DETECTION DATA
+  # ===================================================================
+  fire_detections:
+    firms_viirs_noaa20:
+      description: "VIIRS active fire detections from NOAA-20 satellite"
+      hot_tier_days: 7
+      warm_tier_days: 90
+      cold_tier_days: 365
+      archive_tier_days: 2555  # 7 years for CAL FIRE compliance
+      deletion_rule: "never"
+      compression: "snappy"
+      partitioning:
+        - "year"
+        - "month"
+        - "day"
+
+    firms_viirs_snpp:
+      description: "VIIRS active fire detections from Suomi-NPP satellite"
+      hot_tier_days: 7
+      warm_tier_days: 90
+      cold_tier_days: 365
+      archive_tier_days: 2555
+      deletion_rule: "never"
+
+    firms_modis_terra:
+      description: "MODIS active fire detections from Terra satellite"
+      hot_tier_days: 7
+      warm_tier_days: 90
+      cold_tier_days: 365
+      archive_tier_days: 2555
+      deletion_rule: "never"
+
+    firesat_detections:
+      description: "FireSat 5m resolution fire detections"
+      hot_tier_days: 7
+      warm_tier_days: 90
+      cold_tier_days: 365
+      archive_tier_days: 3650  # 10 years (high-value data)
+      deletion_rule: "never"
+      priority: "critical"
+
+  # ===================================================================
+  # WEATHER DATA
+  # ===================================================================
+  weather_data:
+    era5_reanalysis:
+      description: "ERA5 hourly reanalysis data"
+      hot_tier_days: 7
+      warm_tier_days: 90
+      cold_tier_days: 365
+      archive_tier_days: 3650  # 10 years
+      deletion_rule: "after_archive"
+      aggregation:
+        warm_tier: "hourly"
+        cold_tier: "daily"
+        archive_tier: "daily"
+
+    era5_land_reanalysis:
+      description: "ERA5-Land high-resolution reanalysis"
+      hot_tier_days: 7
+      warm_tier_days: 90
+      cold_tier_days: 365
+      archive_tier_days: 1825  # 5 years
+      deletion_rule: "after_archive"
+
+    nam_forecasts:
+      description: "NAM weather forecast model outputs"
+      hot_tier_days: 3
+      warm_tier_days: 30
+      cold_tier_days: 90
+      archive_tier_days: 365
+      deletion_rule: "after_archive"
+      notes: "Forecasts have shorter value - can delete after 1 year"
+
+    gfs_forecasts:
+      description: "GFS global weather forecast model"
+      hot_tier_days: 3
+      warm_tier_days: 30
+      cold_tier_days: 90
+      archive_tier_days: 365
+      deletion_rule: "after_archive"
+
+    noaa_station_observations:
+      description: "RAWS weather station observations"
+      hot_tier_days: 7
+      warm_tier_days: 90
+      cold_tier_days: 365
+      archive_tier_days: 3650  # 10 years
+      deletion_rule: "never"
+      priority: "high"
+
+  # ===================================================================
+  # SATELLITE IMAGERY
+  # ===================================================================
+  satellite_imagery:
+    sentinel2_msi:
+      description: "Sentinel-2 MSI multispectral imagery"
+      hot_tier_days: 1  # Move immediately after processing
+      warm_tier_days: 30
+      cold_tier_days: 90
+      archive_tier_days: 1825  # 5 years, key scenes only
+      deletion_rule: "conditional"
+      deletion_criteria:
+        cloud_cover_gt: 30  # Delete if cloud cover > 30%
+        age_gt_days: 90
+        not_tagged_as: "fire_event"
+      keep_conditions:
+        - "cloud_cover_percent < 10"
+        - "has_fire_detection = true"
+        - "has_burn_scar = true"
+        - "tags @> ARRAY['fire_event']"
+      priority: "medium"
+
+    sentinel3_slstr:
+      description: "Sentinel-3 SLSTR thermal imagery"
+      hot_tier_days: 1
+      warm_tier_days: 30
+      cold_tier_days: 90
+      archive_tier_days: 1825
+      deletion_rule: "conditional"
+      deletion_criteria:
+        cloud_cover_gt: 50
+        age_gt_days: 90
+
+    landsat8_oli:
+      description: "Landsat-8 OLI multispectral imagery"
+      hot_tier_days: 1
+      warm_tier_days: 60  # 16-day revisit, keep longer
+      cold_tier_days: 180
+      archive_tier_days: 3650  # 10 years, valuable long-term archive
+      deletion_rule: "conditional"
+      deletion_criteria:
+        cloud_cover_gt: 40
+        age_gt_days: 180
+      priority: "high"
+
+  # ===================================================================
+  # IOT SENSOR DATA
+  # ===================================================================
+  sensor_data:
+    sensor_readings:
+      description: "IoT sensor readings (temperature, humidity, smoke)"
+      hot_tier_days: 1
+      warm_tier_days: 30
+      cold_tier_days: 365
+      archive_tier_days: 1825  # 5 years, aggregated only
+      deletion_rule: "after_aggregation"
+      aggregation:
+        warm_tier: "raw"  # Keep raw for 30 days
+        cold_tier: "hourly"  # Aggregate to hourly
+        archive_tier: "daily"  # Aggregate to daily
+      notes: "Delete raw data after aggregation to save space"
+
+    airnow_observations:
+      description: "AirNow air quality observations"
+      hot_tier_days: 7
+      warm_tier_days: 90
+      cold_tier_days: 365
+      archive_tier_days: 1825
+      deletion_rule: "after_archive"
+
+  # ===================================================================
+  # DERIVED/PROCESSED DATA
+  # ===================================================================
+  processed_data:
+    risk_predictions:
+      description: "Fire risk model predictions"
+      hot_tier_days: 7
+      warm_tier_days: 90
+      cold_tier_days: 365
+      archive_tier_days: 1825
+      deletion_rule: "never"
+      priority: "critical"
+
+    fire_perimeters:
+      description: "Historical fire perimeter polygons"
+      hot_tier_days: 30
+      warm_tier_days: 365
+      cold_tier_days: 3650
+      archive_tier_days: 10000  # ~27 years, keep indefinitely
+      deletion_rule: "never"
+      priority: "critical"
+
+# =====================================================================
+# Lifecycle Automation Settings
+# =====================================================================
+automation:
+  enabled: true
+
+  # Daily migration job (HOT → WARM)
+  daily_hot_to_warm:
+    enabled: true
+    schedule: "0 8 * * *"  # 00:00 PST (08:00 UTC)
+    dag_id: "daily_hot_to_warm_migration"
+    batch_size: 10000  # Records per batch
+    parallel_workers: 4
+
+  # Weekly migration job (WARM → COLD)
+  weekly_warm_to_cold:
+    enabled: true
+    schedule: "0 10 * * 0"  # Sundays 02:00 PST (10:00 UTC)
+    dag_id: "weekly_warm_to_cold_migration"
+    batch_size: 1000  # Files per batch
+
+  # Monthly archival job (COLD → ARCHIVE)
+  monthly_cold_to_archive:
+    enabled: true
+    schedule: "0 12 1 * *"  # 1st of month, 04:00 PST (12:00 UTC)
+    dag_id: "monthly_cold_to_archive_migration"
+    target: "aws_s3_glacier"  # or "azure_archive" or "gcp_archive"
+
+  # Weekly cleanup job (delete based on rules)
+  weekly_cleanup:
+    enabled: true
+    schedule: "0 14 * * 0"  # Sundays 06:00 PST (14:00 UTC)
+    dag_id: "weekly_sentinel_cleanup"
+    dry_run: false  # Set to true to preview deletions without executing
+
+# =====================================================================
+# Storage Tier Cost Estimates (USD per GB per month)
+# =====================================================================
+storage_costs:
+  hot_tier: 0.50    # NVMe SSD / Redis / PostgreSQL
+  warm_tier: 0.125  # MinIO / S3 Standard-IA
+  cold_tier: 0.004  # S3 Glacier
+  archive_tier: 0.001  # S3 Glacier Deep Archive
+
+# =====================================================================
+# Alerting Thresholds
+# =====================================================================
+alerts:
+  storage_usage_warning_percent: 75
+  storage_usage_critical_percent: 90
+  migration_failure_threshold: 3  # Alert after 3 consecutive failures
+  quality_score_min: 0.8  # Alert if data quality drops below 80%
+
+  notification_channels:
+    - type: "email"
+      recipients:
+        - "ops-team@wildfire-platform.gov"
+        - "data-team@wildfire-platform.gov"
+    - type: "slack"
+      webhook_url: "${SLACK_WEBHOOK_URL}"
+    - type: "pagerduty"
+      api_key: "${PAGERDUTY_API_KEY}"
+      severity_critical: true
+
+# =====================================================================
+# Compliance & Legal Hold
+# =====================================================================
+compliance:
+  default_retention_years: 7  # CAL FIRE regulatory requirement
+  legal_hold_enabled: true
+  audit_trail_retention_years: 10
+
+  regulatory_frameworks:
+    - "FISMA"
+    - "NIST 800-53"
+    - "SOC 2 Type II"
+    - "CCPA"
+
+# =====================================================================
+# Advanced Features
+# =====================================================================
+advanced:
+  # Delta Lake / Iceberg support (optional)
+  delta_lake:
+    enabled: false
+    catalog: "glue"  # or "hive" or "postgres"
+
+  # Data versioning
+  versioning:
+    enabled: true
+    max_versions: 3
+
+  # Deduplication
+  deduplication:
+    enabled: true
+    key_fields:
+      - "timestamp"
+      - "latitude"
+      - "longitude"
+      - "data_source"

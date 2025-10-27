@@ -1,0 +1,1131 @@
+"""
+FireSat Satellite Data Connector
+
+Integration with Google's FireSat constellation for real-time wildfire detection
+using AI-powered satellite imagery analysis with 20-minute update intervals.
+
+Features:
+- Real-time fire detection from FireSat satellites
+- Classroom-sized fire detection capability
+- AI comparison with local weather factors
+- Integration with Earth Fire Alliance partnership
+
+Author: Wildfire Intelligence Team
+Integration: Google FireSat Project
+"""
+
+import ee
+ee.Initialize(project="wildfire-intelligence-platform")
+
+# Test: get a DEM dataset
+dem = ee.Image("USGS/SRTMGL1_003")
+info = dem.getInfo()
+print("DEM bands:", info["bands"])
+
+
+
+import asyncio
+import logging
+from typing import Dict, List, Optional, Any, Tuple
+from datetime import datetime, timezone, timedelta
+import json
+import numpy as np
+import pandas as pd
+from dataclasses import dataclass
+import aiohttp
+import asyncio
+from pathlib import Path
+import os
+
+# Google Earth Engine imports
+try:
+    import ee
+    import geemap
+    EARTH_ENGINE_AVAILABLE = True
+except ImportError:
+    EARTH_ENGINE_AVAILABLE = False
+    ee = None
+    geemap = None
+
+from ...config import get_settings
+from ...utils.logging import get_logger
+from ...utils.kafka_producer import KafkaProducerManager
+from ...models.simulation_data import (
+    FireSatDetection, 
+    FireSatDetectionResponse,
+    FireSatDetectionDB
+)
+from ...validation.firebench_validator import FireBenchDataValidator
+
+logger = get_logger(__name__)
+settings = get_settings()
+
+
+@dataclass
+class FireSatSatelliteInfo:
+    """FireSat satellite information"""
+    
+    satellite_id: str
+    name: str
+    status: str  # 'active', 'maintenance', 'offline'
+    orbital_altitude_km: float
+    revisit_time_minutes: int
+    resolution_meters: float
+    coverage_swath_km: float
+    last_update: datetime
+    
+    # Capabilities
+    fire_detection_threshold_hectares: float
+    confidence_threshold: float
+    ai_model_version: str
+
+
+@dataclass
+class FireDetectionAlert:
+    """Fire detection alert from FireSat"""
+    
+    alert_id: str
+    detection: FireSatDetection
+    alert_level: str  # 'low', 'medium', 'high', 'critical'
+    notification_sent: bool
+    confirmation_required: bool
+    
+    # Context
+    local_weather: Optional[Dict[str, Any]] = None
+    nearby_detections: List[str] = None
+    historical_activity: Optional[Dict[str, Any]] = None
+
+
+class FireSatConnector:
+    """
+    Enhanced Connector for Google's FireSat constellation and Earth Engine
+    
+    Provides real-time wildfire detection capabilities through:
+    - AI-powered satellite imagery analysis (FireSat - future)
+    - Google Earth Engine satellite fire data (MODIS/VIIRS - active)
+    - 20-minute detection updates
+    - Classroom-sized fire detection
+    - Local weather context integration
+    - Earth Fire Alliance partnership data
+    """
+    
+    def __init__(self):
+        self.api_base_url = settings.FIRESAT_API_URL or "https://api.firesat.earth"  # Placeholder
+        self.api_key = settings.FIRESAT_API_KEY
+        self.partnership_token = settings.EARTH_FIRE_ALLIANCE_TOKEN
+        
+        # Google Earth Engine configuration
+        self.gee_service_account = os.getenv('GOOGLE_EARTH_ENGINE_SERVICE_ACCOUNT')
+        self.gee_private_key_path = os.getenv('GOOGLE_EARTH_ENGINE_PRIVATE_KEY_PATH')
+        self.gee_authenticated = False
+        self.gee_collections = {
+            'modis_fire': 'MODIS/061/MOD14A1',
+            'viirs_fire': 'NOAA/VIIRS/001/VNP14A1',
+            'landsat8': 'LANDSAT/LC08/C02/T1_L2',
+            'sentinel2': 'COPERNICUS/S2_SR'
+        }
+        
+        # Service configuration
+        self.config = {
+            'polling_interval_seconds': 1200,  # 20 minutes
+            'detection_confidence_threshold': 0.85,
+            'alert_radius_km': 50,
+            'max_detections_per_request': 500,
+            'timeout_seconds': 30,
+            'retry_attempts': 3,
+        }
+        
+        # External services
+        self.kafka_producer = KafkaProducerManager()
+        self.validator = FireBenchDataValidator()
+        
+        # State management
+        self.active_satellites = {}
+        self.last_poll_time = None
+        self.detection_history = []
+        self.alert_subscribers = []
+        
+        # Performance metrics
+        self.metrics = {
+            'total_detections': 0,
+            'confirmed_fires': 0,
+            'false_positives': 0,
+            'average_detection_confidence': 0.0,
+            'satellites_active': 0,
+            'last_successful_poll': None,
+            'api_errors': 0
+        }
+        
+        logger.info("FireSat connector initialized")
+        
+        # Initialize Google Earth Engine if available
+        if EARTH_ENGINE_AVAILABLE:
+            asyncio.create_task(self._initialize_earth_engine())
+        else:
+            logger.warning("Google Earth Engine not available. Install with: pip install earthengine-api geemap")
+
+    async def initialize(self):
+        """Initialize FireSat connector and authenticate"""
+        
+        try:
+            logger.info("Initializing FireSat connector")
+            
+            # Initialize Kafka producer
+            await self.kafka_producer.initialize()
+            
+            # Initialize Google Earth Engine
+            await self._initialize_earth_engine()
+            
+            # Check API connectivity and authentication
+            if self.api_key:
+                await self._authenticate_with_firesat_api()
+                await self._get_satellite_constellation_status()
+            else:
+                logger.warning("FireSat API key not configured, using simulation mode")
+                await self._initialize_simulation_mode()
+            
+            logger.info("FireSat connector initialized successfully")
+            
+        except Exception as e:
+            logger.error(f"Error initializing FireSat connector: {e}")
+            raise
+
+    async def _authenticate_with_firesat_api(self):
+        """Authenticate with FireSat API"""
+        
+        try:
+            auth_endpoint = f"{self.api_base_url}/auth/validate"
+            
+            headers = {
+                'Authorization': f'Bearer {self.api_key}',
+                'User-Agent': 'Wildfire-Intelligence-Platform/2.1',
+                'Content-Type': 'application/json'
+            }
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(auth_endpoint, headers=headers) as response:
+                    if response.status == 200:
+                        auth_data = await response.json()
+                        logger.info(f"FireSat authentication successful: {auth_data.get('partnership', 'Standard')}")
+                    else:
+                        logger.error(f"FireSat authentication failed: {response.status}")
+                        raise ValueError("FireSat authentication failed")
+                        
+        except Exception as e:
+            logger.error(f"Error authenticating with FireSat API: {e}")
+            # Fall back to simulation mode
+            await self._initialize_simulation_mode()
+
+    async def _get_satellite_constellation_status(self):
+        """Get current status of FireSat satellite constellation"""
+        
+        try:
+            status_endpoint = f"{self.api_base_url}/satellites/status"
+            
+            headers = {
+                'Authorization': f'Bearer {self.api_key}',
+                'Content-Type': 'application/json'
+            }
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(status_endpoint, headers=headers) as response:
+                    if response.status == 200:
+                        satellites_data = await response.json()
+                        
+                        for satellite_info in satellites_data.get('satellites', []):
+                            satellite = FireSatSatelliteInfo(
+                                satellite_id=satellite_info['id'],
+                                name=satellite_info['name'],
+                                status=satellite_info['status'],
+                                orbital_altitude_km=satellite_info['altitude_km'],
+                                revisit_time_minutes=satellite_info['revisit_time_min'],
+                                resolution_meters=satellite_info['resolution_m'],
+                                coverage_swath_km=satellite_info['swath_km'],
+                                last_update=datetime.fromisoformat(satellite_info['last_update']),
+                                fire_detection_threshold_hectares=satellite_info['fire_threshold_ha'],
+                                confidence_threshold=satellite_info['confidence_threshold'],
+                                ai_model_version=satellite_info['ai_model_version']
+                            )
+                            
+                            self.active_satellites[satellite.satellite_id] = satellite
+                        
+                        self.metrics['satellites_active'] = len(self.active_satellites)
+                        logger.info(f"FireSat constellation status: {len(self.active_satellites)} satellites active")
+                        
+                    else:
+                        logger.error(f"Failed to get satellite status: {response.status}")
+                        
+        except Exception as e:
+            logger.error(f"Error getting satellite constellation status: {e}")
+            await self._initialize_simulation_mode()
+
+    async def _initialize_simulation_mode(self):
+        """Initialize simulation mode for testing/development"""
+        
+        logger.info("Initializing FireSat simulation mode")
+        
+        # Create simulated satellites
+        simulated_satellites = [
+            {
+                'id': 'firesat-1-sim',
+                'name': 'FireSat-1 (Simulation)',
+                'status': 'active',
+                'altitude_km': 550,
+                'revisit_time_min': 20,
+                'resolution_m': 10.0,
+                'swath_km': 300,
+                'fire_threshold_ha': 0.25,  # Classroom size
+                'confidence_threshold': 0.85,
+                'ai_model_version': 'v2.1-simulation'
+            },
+            {
+                'id': 'firesat-2-sim',
+                'name': 'FireSat-2 (Simulation)',
+                'status': 'active',
+                'altitude_km': 575,
+                'revisit_time_min': 22,
+                'resolution_m': 8.0,
+                'swath_km': 250,
+                'fire_threshold_ha': 0.2,
+                'confidence_threshold': 0.88,
+                'ai_model_version': 'v2.1-simulation'
+            }
+        ]
+        
+        for sat_data in simulated_satellites:
+            satellite = FireSatSatelliteInfo(
+                satellite_id=sat_data['id'],
+                name=sat_data['name'],
+                status=sat_data['status'],
+                orbital_altitude_km=sat_data['altitude_km'],
+                revisit_time_minutes=sat_data['revisit_time_min'],
+                resolution_meters=sat_data['resolution_m'],
+                coverage_swath_km=sat_data['swath_km'],
+                last_update=datetime.now(timezone.utc),
+                fire_detection_threshold_hectares=sat_data['fire_threshold_ha'],
+                confidence_threshold=sat_data['confidence_threshold'],
+                ai_model_version=sat_data['ai_model_version']
+            )
+            
+            self.active_satellites[satellite.satellite_id] = satellite
+        
+        self.metrics['satellites_active'] = len(self.active_satellites)
+        logger.info(f"FireSat simulation mode initialized with {len(self.active_satellites)} simulated satellites")
+
+    async def _initialize_earth_engine(self):
+        """Initialize Google Earth Engine authentication"""
+        
+        if not EARTH_ENGINE_AVAILABLE:
+            logger.warning("Google Earth Engine not available")
+            return
+        
+        try:
+            logger.info("Initializing Google Earth Engine")
+            
+            # Check if service account credentials are available
+            if self.gee_service_account and self.gee_private_key_path:
+                if os.path.exists(self.gee_private_key_path):
+                    # Authenticate with service account
+                    credentials = ee.ServiceAccountCredentials(
+                        self.gee_service_account,
+                        self.gee_private_key_path
+                    )
+                    ee.Initialize(credentials)
+                    self.gee_authenticated = True
+                    logger.info("Google Earth Engine authenticated with service account")
+                else:
+                    logger.error(f"GEE private key file not found: {self.gee_private_key_path}")
+            else:
+                # Try to authenticate with default credentials or existing token
+                try:
+                    ee.Initialize()
+                    self.gee_authenticated = True
+                    logger.info("Google Earth Engine authenticated with default credentials")
+                except Exception as e:
+                    logger.warning(f"Google Earth Engine authentication failed: {e}")
+                    logger.info("Run 'earthengine authenticate' to set up credentials")
+                    self.gee_authenticated = False
+                    
+        except Exception as e:
+            logger.error(f"Error initializing Google Earth Engine: {e}")
+            self.gee_authenticated = False
+
+    async def poll_fire_detections(
+        self, 
+        geographic_bounds: Optional[Dict[str, float]] = None,
+        since_timestamp: Optional[datetime] = None
+    ) -> List[FireSatDetection]:
+        """
+        Poll for new fire detections from FireSat constellation
+        
+        Args:
+            geographic_bounds: Optional bounds to limit detections (lat_min, lat_max, lon_min, lon_max)
+            since_timestamp: Only return detections after this time
+            
+        Returns:
+            List of fire detections
+        """
+        try:
+            if not since_timestamp:
+                since_timestamp = self.last_poll_time or (datetime.now(timezone.utc) - timedelta(hours=1))
+            
+            logger.info(f"Polling FireSat for detections since {since_timestamp}")
+            
+            # Try Google Earth Engine first if available
+            if self.gee_authenticated:
+                gee_detections = await self._poll_earth_engine_data(geographic_bounds, since_timestamp)
+                if gee_detections:
+                    detections = gee_detections
+                    logger.info(f"Retrieved {len(detections)} detections from Google Earth Engine")
+                else:
+                    detections = []
+            elif self.api_key and not any('sim' in sat_id for sat_id in self.active_satellites.keys()):
+                # Real FireSat API call (when available)
+                detections = await self._poll_real_api(geographic_bounds, since_timestamp)
+            else:
+                # Simulation mode
+                detections = await self._poll_simulated_data(geographic_bounds, since_timestamp)
+            
+            # Validate detections
+            validated_detections = []
+            for detection in detections:
+                validation_result = await self.validator.validate_firesat_detection(detection)
+                if validation_result['is_valid']:
+                    validated_detections.append(detection)
+                else:
+                    logger.warning(f"Invalid FireSat detection: {validation_result['errors']}")
+            
+            # Update metrics
+            self.metrics['total_detections'] += len(validated_detections)
+            if validated_detections:
+                avg_confidence = sum(d.confidence for d in validated_detections) / len(validated_detections)
+                self.metrics['average_detection_confidence'] = avg_confidence
+                self.metrics['last_successful_poll'] = datetime.now(timezone.utc)
+            
+            self.last_poll_time = datetime.now(timezone.utc)
+            self.detection_history.extend(validated_detections)
+            
+            # Keep history manageable (last 24 hours)
+            cutoff_time = datetime.now(timezone.utc) - timedelta(hours=24)
+            self.detection_history = [
+                d for d in self.detection_history 
+                if d.detection_time > cutoff_time
+            ]
+            
+            logger.info(f"Retrieved {len(validated_detections)} valid fire detections")
+            return validated_detections
+            
+        except Exception as e:
+            logger.error(f"Error polling fire detections: {e}")
+            self.metrics['api_errors'] += 1
+            return []
+
+    async def _poll_real_api(
+        self, 
+        geographic_bounds: Optional[Dict[str, float]], 
+        since_timestamp: datetime
+    ) -> List[FireSatDetection]:
+        """Poll real FireSat API for detections"""
+        
+        try:
+            detections_endpoint = f"{self.api_base_url}/detections"
+            
+            params = {
+                'since': since_timestamp.isoformat(),
+                'limit': self.config['max_detections_per_request'],
+                'confidence_threshold': self.config['detection_confidence_threshold']
+            }
+            
+            # Add geographic bounds if provided
+            if geographic_bounds:
+                params.update({
+                    'lat_min': geographic_bounds['lat_min'],
+                    'lat_max': geographic_bounds['lat_max'],
+                    'lon_min': geographic_bounds['lon_min'],
+                    'lon_max': geographic_bounds['lon_max']
+                })
+            
+            headers = {
+                'Authorization': f'Bearer {self.api_key}',
+                'Content-Type': 'application/json'
+            }
+            
+            timeout = aiohttp.ClientTimeout(total=self.config['timeout_seconds'])
+            
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(detections_endpoint, headers=headers, params=params) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return [self._parse_api_detection(det) for det in data.get('detections', [])]
+                    else:
+                        logger.error(f"FireSat API error: {response.status}")
+                        return []
+                        
+        except Exception as e:
+            logger.error(f"Error calling FireSat API: {e}")
+            return []
+
+    async def _poll_earth_engine_data(
+        self,
+        geographic_bounds: Optional[Dict[str, float]],
+        since_timestamp: datetime
+    ) -> List[FireSatDetection]:
+        """Poll Google Earth Engine for real satellite fire detections"""
+        
+        if not self.gee_authenticated:
+            return []
+            
+        try:
+            logger.info("Querying Google Earth Engine for fire detections")
+            
+            # Set up geographic bounds (California by default)
+            if geographic_bounds:
+                region = ee.Geometry.Rectangle([
+                    geographic_bounds['lon_min'], geographic_bounds['lat_min'],
+                    geographic_bounds['lon_max'], geographic_bounds['lat_max']
+                ])
+            else:
+                # California bounds
+                region = ee.Geometry.Rectangle([-124.5, 32.5, -114.0, 42.0])
+            
+            # Calculate date range for Earth Engine query
+            start_date = since_timestamp.strftime('%Y-%m-%d')
+            end_date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+            
+            detections = []
+            
+            # Query MODIS fire data (MOD14A1 - Terra, MYD14A1 - Aqua)
+            modis_detections = await self._query_modis_fires(region, start_date, end_date)
+            detections.extend(modis_detections)
+            
+            # Query VIIRS fire data
+            viirs_detections = await self._query_viirs_fires(region, start_date, end_date)
+            detections.extend(viirs_detections)
+            
+            logger.info(f"Retrieved {len(detections)} fire detections from Google Earth Engine")
+            return detections
+            
+        except Exception as e:
+            logger.error(f"Error querying Google Earth Engine: {e}")
+            return []
+
+    async def _query_modis_fires(
+        self, 
+        region: 'ee.Geometry', 
+        start_date: str, 
+        end_date: str
+    ) -> List[FireSatDetection]:
+        """Query MODIS fire detection data from Google Earth Engine"""
+        
+        try:
+            # MODIS Thermal Anomalies/Fire Daily Global 1km (MOD14A1)
+            collection = ee.ImageCollection('MODIS/061/MOD14A1') \
+                .filterDate(start_date, end_date) \
+                .filterBounds(region)
+            
+            detections = []
+            
+            # Get fire mask data
+            fire_images = collection.select(['FireMask'])
+            
+            # Convert to feature collection for processing
+            def extract_fire_pixels(image):
+                # Fire pixels have values 7, 8, 9 in FireMask
+                fire_pixels = image.select('FireMask').gte(7).And(image.select('FireMask').lte(9))
+                
+                # Get pixel coordinates and values
+                pixels = fire_pixels.sample(
+                    region=region,
+                    scale=1000,  # 1km resolution
+                    maxPixels=1000
+                )
+                
+                return pixels.map(lambda f: f.set('date', image.date()))
+            
+            # Process each image in collection
+            fire_features = fire_images.map(extract_fire_pixels).flatten()
+            
+            # Execute the Earth Engine computation
+            features_info = fire_features.getInfo()
+            
+            for feature in features_info.get('features', []):
+                props = feature['properties']
+                coords = feature['geometry']['coordinates']
+                
+                if props.get('FireMask', 0) >= 7:  # Fire detected
+                    detection = FireSatDetection(
+                        detection_id=f"modis-{props.get('date', '')}-{len(detections)}",
+                        latitude=coords[1],
+                        longitude=coords[0],
+                        confidence=0.85 if props.get('FireMask') == 9 else 0.75,
+                        fire_size_estimate=1.0,  # 1km pixel ≈ 1 hectare
+                        temperature_estimate=None,
+                        satellite_name="MODIS Terra",
+                        detection_time=datetime.fromtimestamp(props.get('date', 0) / 1000, tz=timezone.utc),
+                        image_resolution=1000.0,  # 1km
+                        weather_conditions=None,
+                        terrain_info=None
+                    )
+                    detections.append(detection)
+            
+            logger.info(f"Found {len(detections)} MODIS fire detections")
+            return detections
+            
+        except Exception as e:
+            logger.error(f"Error querying MODIS fires: {e}")
+            return []
+
+    async def _query_viirs_fires(
+        self, 
+        region: 'ee.Geometry', 
+        start_date: str, 
+        end_date: str
+    ) -> List[FireSatDetection]:
+        """Query VIIRS fire detection data from Google Earth Engine"""
+        
+        try:
+            # VIIRS Active Fire Product (VNP14A1)
+            collection = ee.ImageCollection('NOAA/VIIRS/001/VNP14A1') \
+                .filterDate(start_date, end_date) \
+                .filterBounds(region)
+            
+            detections = []
+            
+            # Process fire detection data
+            fire_images = collection.select(['FireMask'])
+            
+            def extract_viirs_fires(image):
+                # VIIRS fire pixels
+                fire_pixels = image.select('FireMask').gte(7).And(image.select('FireMask').lte(9))
+                
+                pixels = fire_pixels.sample(
+                    region=region,
+                    scale=375,  # 375m resolution
+                    maxPixels=1000
+                )
+                
+                return pixels.map(lambda f: f.set('date', image.date()))
+            
+            fire_features = fire_images.map(extract_viirs_fires).flatten()
+            
+            # Execute computation
+            features_info = fire_features.getInfo()
+            
+            for feature in features_info.get('features', []):
+                props = feature['properties']
+                coords = feature['geometry']['coordinates']
+                
+                if props.get('FireMask', 0) >= 7:
+                    detection = FireSatDetection(
+                        detection_id=f"viirs-{props.get('date', '')}-{len(detections)}",
+                        latitude=coords[1],
+                        longitude=coords[0],
+                        confidence=0.90 if props.get('FireMask') == 9 else 0.80,
+                        fire_size_estimate=0.14,  # 375m pixel ≈ 0.14 hectares
+                        temperature_estimate=None,
+                        satellite_name="VIIRS",
+                        detection_time=datetime.fromtimestamp(props.get('date', 0) / 1000, tz=timezone.utc),
+                        image_resolution=375.0,  # 375m
+                        weather_conditions=None,
+                        terrain_info=None
+                    )
+                    detections.append(detection)
+            
+            logger.info(f"Found {len(detections)} VIIRS fire detections")
+            return detections
+            
+        except Exception as e:
+            logger.error(f"Error querying VIIRS fires: {e}")
+            return []
+
+    def _parse_api_detection(self, api_data: Dict[str, Any]) -> FireSatDetection:
+        """Parse API response into FireSatDetection object"""
+        
+        return FireSatDetection(
+            detection_id=api_data['id'],
+            latitude=api_data['latitude'],
+            longitude=api_data['longitude'],
+            confidence=api_data['confidence'],
+            fire_size_estimate=api_data.get('fire_size_hectares'),
+            temperature_estimate=api_data.get('temperature_kelvin'),
+            satellite_name=api_data['satellite_name'],
+            detection_time=datetime.fromisoformat(api_data['detection_time']),
+            image_resolution=api_data['resolution_meters'],
+            weather_conditions=api_data.get('weather_context'),
+            terrain_info=api_data.get('terrain_context')
+        )
+
+    async def _poll_simulated_data(
+        self, 
+        geographic_bounds: Optional[Dict[str, float]], 
+        since_timestamp: datetime
+    ) -> List[FireSatDetection]:
+        """Generate simulated FireSat detections for testing"""
+        
+        # Generate 0-5 random detections
+        num_detections = np.random.randint(0, 6)
+        
+        if num_detections == 0:
+            return []
+        
+        detections = []
+        
+        for i in range(num_detections):
+            # Generate detection in California (default test area)
+            if geographic_bounds:
+                lat = np.random.uniform(geographic_bounds['lat_min'], geographic_bounds['lat_max'])
+                lon = np.random.uniform(geographic_bounds['lon_min'], geographic_bounds['lon_max'])
+            else:
+                lat = np.random.uniform(32.5, 42.0)  # California latitude range
+                lon = np.random.uniform(-124.5, -114.0)  # California longitude range
+            
+            # Random satellite
+            satellite = np.random.choice(list(self.active_satellites.values()))
+            
+            # Generate realistic detection parameters
+            confidence = np.random.uniform(
+                satellite.confidence_threshold, 
+                min(satellite.confidence_threshold + 0.1, 1.0)
+            )
+            
+            fire_size = np.random.uniform(
+                satellite.fire_detection_threshold_hectares,
+                satellite.fire_detection_threshold_hectares * 10
+            )
+            
+            temperature = np.random.uniform(600, 1200)  # Kelvin
+            
+            detection = FireSatDetection(
+                detection_id=f"sim-{datetime.now().strftime('%Y%m%d%H%M%S')}-{i:03d}",
+                latitude=lat,
+                longitude=lon,
+                confidence=confidence,
+                fire_size_estimate=fire_size,
+                temperature_estimate=temperature,
+                satellite_name=satellite.name,
+                detection_time=datetime.now(timezone.utc) - timedelta(minutes=np.random.randint(0, 20)),
+                image_resolution=satellite.resolution_meters,
+                weather_conditions=self._generate_simulated_weather(),
+                terrain_info=self._generate_simulated_terrain()
+            )
+            
+            detections.append(detection)
+        
+        return detections
+
+    def _generate_simulated_weather(self) -> Dict[str, Any]:
+        """Generate simulated weather conditions"""
+        
+        return {
+            'temperature_c': np.random.uniform(20, 45),
+            'humidity_percent': np.random.uniform(10, 70),
+            'wind_speed_ms': np.random.uniform(0, 25),
+            'wind_direction_degrees': np.random.uniform(0, 360),
+            'precipitation_mm_24h': np.random.uniform(0, 5),
+            'fire_weather_index': np.random.uniform(0, 100)
+        }
+
+    def _generate_simulated_terrain(self) -> Dict[str, Any]:
+        """Generate simulated terrain information"""
+        
+        vegetation_types = ['grassland', 'shrubland', 'forest', 'mixed_vegetation', 'agricultural']
+        
+        return {
+            'elevation_m': np.random.uniform(0, 3000),
+            'slope_degrees': np.random.uniform(0, 45),
+            'aspect_degrees': np.random.uniform(0, 360),
+            'vegetation_type': np.random.choice(vegetation_types),
+            'fuel_moisture_percent': np.random.uniform(5, 25)
+        }
+
+    async def process_detection_with_context(
+        self, 
+        detection: FireSatDetection,
+        include_weather: bool = True,
+        include_historical: bool = True
+    ) -> FireDetectionAlert:
+        """
+        Process detection with local weather and historical context
+        
+        Args:
+            detection: FireSat detection to process
+            include_weather: Whether to fetch local weather data
+            include_historical: Whether to include historical fire activity
+            
+        Returns:
+            Enhanced detection alert with context
+        """
+        try:
+            alert_id = f"alert-{datetime.now().strftime('%Y%m%d%H%M%S')}-{detection.detection_id}"
+            
+            # Determine alert level based on detection properties
+            alert_level = self._calculate_alert_level(detection)
+            
+            # Get local weather context if requested
+            local_weather = None
+            if include_weather:
+                local_weather = await self._get_local_weather_context(
+                    detection.latitude, 
+                    detection.longitude
+                )
+            
+            # Find nearby detections
+            nearby_detections = self._find_nearby_detections(
+                detection.latitude,
+                detection.longitude,
+                radius_km=self.config['alert_radius_km']
+            )
+            
+            # Get historical activity if requested
+            historical_activity = None
+            if include_historical:
+                historical_activity = await self._get_historical_fire_activity(
+                    detection.latitude,
+                    detection.longitude
+                )
+            
+            # Create alert
+            alert = FireDetectionAlert(
+                alert_id=alert_id,
+                detection=detection,
+                alert_level=alert_level,
+                notification_sent=False,
+                confirmation_required=alert_level in ['high', 'critical'],
+                local_weather=local_weather,
+                nearby_detections=nearby_detections,
+                historical_activity=historical_activity
+            )
+            
+            logger.info(f"Processed FireSat detection {detection.detection_id} -> Alert {alert_level}")
+            return alert
+            
+        except Exception as e:
+            logger.error(f"Error processing detection with context: {e}")
+            raise
+
+    def _calculate_alert_level(self, detection: FireSatDetection) -> str:
+        """Calculate alert level based on detection properties"""
+        
+        score = 0
+        
+        # Confidence score (0-40 points)
+        score += detection.confidence * 40
+        
+        # Fire size score (0-30 points)
+        if detection.fire_size_estimate:
+            if detection.fire_size_estimate > 10:  # > 10 hectares
+                score += 30
+            elif detection.fire_size_estimate > 2:  # > 2 hectares
+                score += 20
+            else:
+                score += 10
+        
+        # Temperature score (0-20 points)
+        if detection.temperature_estimate:
+            if detection.temperature_estimate > 1000:  # Very hot
+                score += 20
+            elif detection.temperature_estimate > 800:  # Hot
+                score += 15
+            else:
+                score += 10
+        
+        # Weather context score (0-10 points)
+        if detection.weather_conditions:
+            weather = detection.weather_conditions
+            if weather.get('wind_speed_ms', 0) > 15:  # High wind
+                score += 5
+            if weather.get('humidity_percent', 50) < 20:  # Low humidity
+                score += 3
+            if weather.get('fire_weather_index', 0) > 80:  # High fire weather index
+                score += 2
+        
+        # Determine alert level
+        if score >= 80:
+            return 'critical'
+        elif score >= 60:
+            return 'high'
+        elif score >= 40:
+            return 'medium'
+        else:
+            return 'low'
+
+    async def _get_local_weather_context(self, latitude: float, longitude: float) -> Dict[str, Any]:
+        """Get local weather conditions for detection location"""
+        
+        # Placeholder for weather API integration
+        return {
+            'current_conditions': {
+                'temperature_c': 32.0,
+                'humidity_percent': 25.0,
+                'wind_speed_ms': 8.5,
+                'wind_direction_degrees': 225,
+                'pressure_hpa': 1013.25
+            },
+            'forecast_24h': {
+                'temperature_range_c': [28, 38],
+                'humidity_range_percent': [20, 45],
+                'wind_speed_range_ms': [5, 15],
+                'precipitation_probability': 0.1
+            },
+            'fire_weather_indices': {
+                'fire_weather_index': 85,
+                'haines_index': 6,
+                'burning_index': 75
+            },
+            'source': 'weather_api',
+            'timestamp': datetime.now(timezone.utc).isoformat()
+        }
+
+    def _find_nearby_detections(self, latitude: float, longitude: float, radius_km: float) -> List[str]:
+        """Find nearby fire detections within radius"""
+        
+        nearby_detections = []
+        
+        for detection in self.detection_history:
+            # Simple distance calculation (Haversine formula would be more accurate)
+            lat_diff = abs(detection.latitude - latitude)
+            lon_diff = abs(detection.longitude - longitude)
+            
+            # Rough distance in km (1 degree ≈ 111 km)
+            distance_km = np.sqrt((lat_diff * 111)**2 + (lon_diff * 111 * np.cos(np.radians(latitude)))**2)
+            
+            if distance_km <= radius_km:
+                nearby_detections.append(detection.detection_id)
+        
+        return nearby_detections
+
+    async def _get_historical_fire_activity(self, latitude: float, longitude: float) -> Dict[str, Any]:
+        """Get historical fire activity for the area"""
+        
+        # Placeholder for historical fire database query
+        return {
+            'fires_last_year': np.random.randint(0, 5),
+            'largest_fire_hectares': np.random.uniform(0, 1000),
+            'average_fire_season_start': 'June',
+            'average_fire_season_end': 'October',
+            'risk_rating': np.random.choice(['low', 'moderate', 'high', 'extreme']),
+            'predominant_cause': np.random.choice(['lightning', 'human', 'equipment', 'unknown']),
+            'source': 'historical_fire_database',
+            'analysis_radius_km': 25
+        }
+
+    async def stream_detections_to_kafka(self, detections: List[FireSatDetection]) -> bool:
+        """Stream fire detections to Kafka topic"""
+        
+        if not detections:
+            return True
+        
+        try:
+            topic_name = "firesat-detections"
+            
+            messages = []
+            for detection in detections:
+                message = {
+                    'key': detection.detection_id,
+                    'value': {
+                        'detection': detection.dict(),
+                        'source': 'firesat',
+                        'timestamp': datetime.now(timezone.utc).isoformat(),
+                        'connector_version': '1.0'
+                    }
+                }
+                messages.append(message)
+            
+            results = await self.kafka_producer.send_batch(topic_name, messages)
+            success_count = len([r for r in results if r.get('success', False)])
+            
+            logger.info(f"Streamed {success_count}/{len(detections)} detections to Kafka")
+            return success_count == len(detections)
+            
+        except Exception as e:
+            logger.error(f"Error streaming detections to Kafka: {e}")
+            return False
+
+    async def send_detection_alerts(self, alerts: List[FireDetectionAlert]) -> Dict[str, Any]:
+        """Send detection alerts to subscribers"""
+        
+        results = {
+            'total_alerts': len(alerts),
+            'sent_successfully': 0,
+            'failed_to_send': 0,
+            'high_priority_alerts': 0
+        }
+        
+        for alert in alerts:
+            try:
+                # Count high priority alerts
+                if alert.alert_level in ['high', 'critical']:
+                    results['high_priority_alerts'] += 1
+                
+                # Send alert (placeholder for notification system)
+                alert_data = {
+                    'alert_id': alert.alert_id,
+                    'detection': alert.detection.dict(),
+                    'alert_level': alert.alert_level,
+                    'local_weather': alert.local_weather,
+                    'nearby_detections_count': len(alert.nearby_detections or []),
+                    'timestamp': datetime.now(timezone.utc).isoformat()
+                }
+                
+                # Simulate sending alert
+                alert.notification_sent = True
+                results['sent_successfully'] += 1
+                
+                logger.debug(f"Sent {alert.alert_level} alert for detection {alert.detection.detection_id}")
+                
+            except Exception as e:
+                logger.error(f"Error sending alert {alert.alert_id}: {e}")
+                results['failed_to_send'] += 1
+        
+        return results
+
+    async def start_continuous_monitoring(self, 
+                                        geographic_bounds: Optional[Dict[str, float]] = None,
+                                        callback: Optional[Callable] = None):
+        """Start continuous fire monitoring with FireSat"""
+        
+        logger.info("Starting continuous FireSat monitoring")
+        
+        while True:
+            try:
+                # Poll for new detections
+                detections = await self.poll_fire_detections(geographic_bounds)
+                
+                if detections:
+                    # Process detections with context
+                    alerts = []
+                    for detection in detections:
+                        alert = await self.process_detection_with_context(detection)
+                        alerts.append(alert)
+                    
+                    # Stream to Kafka
+                    await self.stream_detections_to_kafka(detections)
+                    
+                    # Send alerts
+                    alert_results = await self.send_detection_alerts(alerts)
+                    
+                    logger.info(f"Processed {len(detections)} detections, "
+                               f"sent {alert_results['sent_successfully']} alerts")
+                    
+                    # Call callback if provided
+                    if callback:
+                        await callback(detections, alerts)
+                
+                # Wait for next polling interval
+                await asyncio.sleep(self.config['polling_interval_seconds'])
+                
+            except Exception as e:
+                logger.error(f"Error in continuous monitoring: {e}")
+                await asyncio.sleep(60)  # Wait 1 minute before retrying
+
+    async def get_satellite_status(self) -> Dict[str, Any]:
+        """Get current status of FireSat constellation"""
+        
+        satellite_status = {}
+        
+        for sat_id, satellite in self.active_satellites.items():
+            satellite_status[sat_id] = {
+                'name': satellite.name,
+                'status': satellite.status,
+                'last_update': satellite.last_update.isoformat(),
+                'coverage_info': {
+                    'altitude_km': satellite.orbital_altitude_km,
+                    'revisit_time_min': satellite.revisit_time_minutes,
+                    'resolution_m': satellite.resolution_meters,
+                    'swath_km': satellite.coverage_swath_km
+                },
+                'detection_capability': {
+                    'fire_threshold_ha': satellite.fire_detection_threshold_hectares,
+                    'confidence_threshold': satellite.confidence_threshold,
+                    'ai_model_version': satellite.ai_model_version
+                }
+            }
+        
+        return {
+            'constellation_status': 'operational' if self.active_satellites else 'offline',
+            'total_satellites': len(self.active_satellites),
+            'active_satellites': len([s for s in self.active_satellites.values() if s.status == 'active']),
+            'satellites': satellite_status,
+            'metrics': self.metrics,
+            'last_poll': self.last_poll_time.isoformat() if self.last_poll_time else None
+        }
+
+    async def health_check(self) -> Dict[str, Any]:
+        """Check FireSat connector health"""
+        
+        health_status = {
+            'status': 'healthy',
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'components': {},
+            'metrics': self.metrics.copy()
+        }
+        
+        try:
+            # Check API connectivity
+            if self.api_key and not any('sim' in sat_id for sat_id in self.active_satellites.keys()):
+                try:
+                    # Test API call
+                    await self._authenticate_with_firesat_api()
+                    health_status['components']['firesat_api'] = 'connected'
+                except Exception as e:
+                    health_status['components']['firesat_api'] = f'error: {e}'
+                    health_status['status'] = 'degraded'
+            else:
+                health_status['components']['firesat_api'] = 'simulation_mode'
+            
+            # Check Kafka connectivity
+            kafka_health = await self.kafka_producer.health_check()
+            health_status['components']['kafka'] = kafka_health.get('status', 'unknown')
+            
+            # Check Google Earth Engine
+            if EARTH_ENGINE_AVAILABLE:
+                health_status['components']['google_earth_engine'] = 'authenticated' if self.gee_authenticated else 'not_authenticated'
+                if not self.gee_authenticated:
+                    health_status['status'] = 'degraded'
+            else:
+                health_status['components']['google_earth_engine'] = 'not_installed'
+                health_status['status'] = 'degraded'
+            
+            # Check satellite constellation
+            active_satellites = len([s for s in self.active_satellites.values() if s.status == 'active'])
+            health_status['components']['satellites'] = f'{active_satellites} active'
+            
+            if active_satellites == 0 and not self.gee_authenticated:
+                health_status['status'] = 'degraded'
+            
+        except Exception as e:
+            health_status['status'] = 'unhealthy'
+            health_status['error'] = str(e)
+        
+        return health_status
+
+
+if __name__ == "__main__":
+    # Example usage for testing
+    async def test_firesat_connector():
+        connector = FireSatConnector()
+        
+        # Initialize connector
+        await connector.initialize()
+        
+        # Get satellite status
+        status = await connector.get_satellite_status()
+        print("Satellite Status:", json.dumps(status, indent=2))
+        
+        # Poll for detections
+        detections = await connector.poll_fire_detections()
+        print(f"Found {len(detections)} fire detections")
+        
+        # Process detections with context
+        alerts = []
+        for detection in detections:
+            alert = await connector.process_detection_with_context(detection)
+            alerts.append(alert)
+            print(f"Detection: {detection.detection_id}, Alert Level: {alert.alert_level}")
+        
+        # Health check
+        health = await connector.health_check()
+        print("Health Status:", json.dumps(health, indent=2))
+    
+    # Run test
+    asyncio.run(test_firesat_connector())

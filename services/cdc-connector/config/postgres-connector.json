@@ -1,0 +1,66 @@
+{
+  "name": "wildfire-postgres-cdc",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "database.hostname": "postgres",
+    "database.port": "5432",
+    "database.user": "wildfire_user",
+    "database.password": "wildfire_password",
+    "database.dbname": "wildfire_db",
+    "database.server.name": "wildfire",
+    "topic.prefix": "cdc.wildfire",
+
+    "plugin.name": "pgoutput",
+    "publication.name": "wildfire_publication",
+    "slot.name": "wildfire_slot",
+
+    "table.include.list": "public.fire_detections,public.weather_data,public.sensor_readings,public.evacuation_zones,public.resource_allocations",
+
+    "snapshot.mode": "initial",
+    "snapshot.isolation.mode": "repeatable_read",
+
+    "decimal.handling.mode": "double",
+    "time.precision.mode": "adaptive",
+    "interval.handling.mode": "numeric",
+
+    "heartbeat.interval.ms": "10000",
+    "heartbeat.action.query": "UPDATE public.cdc_heartbeat SET last_heartbeat = NOW() WHERE id = 1",
+
+    "transforms": "unwrap,route,addTimestamp",
+    "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+    "transforms.unwrap.drop.tombstones": "false",
+    "transforms.unwrap.delete.handling.mode": "rewrite",
+    "transforms.unwrap.add.fields": "op,source.ts_ms,transaction.id",
+
+    "transforms.route.type": "org.apache.kafka.connect.transforms.RegexRouter",
+    "transforms.route.regex": "cdc.wildfire.public.(.*)",
+    "transforms.route.replacement": "wildfire-cdc-$1",
+
+    "transforms.addTimestamp.type": "org.apache.kafka.connect.transforms.InsertField$Value",
+    "transforms.addTimestamp.timestamp.field": "cdc_timestamp",
+
+    "key.converter": "io.confluent.connect.avro.AvroConverter",
+    "key.converter.schema.registry.url": "http://schema-registry:8081",
+    "key.converter.enhanced.avro.schema.support": "true",
+
+    "value.converter": "io.confluent.connect.avro.AvroConverter",
+    "value.converter.schema.registry.url": "http://schema-registry:8081",
+    "value.converter.enhanced.avro.schema.support": "true",
+
+    "producer.override.compression.type": "zstd",
+    "producer.override.batch.size": "32768",
+    "producer.override.linger.ms": "100",
+    "producer.override.max.in.flight.requests.per.connection": "5",
+
+    "errors.tolerance": "all",
+    "errors.log.enable": "true",
+    "errors.log.include.messages": "true",
+    "errors.deadletterqueue.topic.name": "wildfire-cdc-dlq",
+    "errors.deadletterqueue.topic.replication.factor": "1",
+    "errors.deadletterqueue.context.headers.enable": "true",
+
+    "database.history.kafka.bootstrap.servers": "kafka:29092",
+    "database.history.kafka.topic": "wildfire-cdc-history",
+    "database.history.kafka.recovery.poll.interval.ms": "100"
+  }
+}

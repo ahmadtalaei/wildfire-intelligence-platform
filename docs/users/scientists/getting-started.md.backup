@@ -1,0 +1,328 @@
+# Data Scientist Getting Started Guide
+
+Welcome to the Wildfire Intelligence Platform Scientist Workbench. This comprehensive research environment is designed for machine learning experimentation, model development, and advanced fire prediction research.
+
+## Quick Start
+
+### 1. Accessing the Workbench
+- **URL**: http://localhost:3002 (or your deployed URL)
+- **Login**: Use your scientist credentials
+- **Role**: Data Scientist access level required
+
+### 2. Workbench Overview
+The Scientist Workbench provides five main areas:
+
+#### ML Experiments
+- **Experiment Tracking**: MLflow integration for experiment management
+- **Model Registry**: Centralized model versioning and deployment
+- **Hyperparameter Tuning**: Automated optimization workflows
+- **A/B Testing**: Model performance comparison tools
+
+#### Data Science Tools
+- **Jupyter Hub**: Integrated notebook environment
+- **Python/R Support**: Full data science stack
+- **GPU Acceleration**: CUDA-enabled compute resources
+- **Distributed Computing**: Spark cluster access
+
+#### Model Development
+- **Feature Engineering**: Advanced data preprocessing tools
+- **Algorithm Library**: Pre-implemented fire prediction models
+- **Custom Models**: Framework for developing new algorithms
+- **Model Validation**: Comprehensive testing and validation tools
+
+#### Research Datasets
+- **Historical Data**: 25+ years of fire and weather data
+- **Real-time Streams**: Live data feeds for testing
+- **Satellite Imagery**: Processed remote sensing data
+- **Synthetic Data**: Simulation-generated datasets
+
+#### Deployment Pipeline
+- **Model Serving**: Production deployment infrastructure
+- **API Generation**: Automatic API creation for models
+- **Monitoring**: Model performance tracking in production
+- **Rollback**: Safe model version management
+
+### 3. ML Experiment Management
+
+#### Starting a New Experiment
+1. **Define Objective**: Specify your research question
+2. **Select Data**: Choose datasets and time periods
+3. **Feature Selection**: Identify relevant variables
+4. **Algorithm Choice**: Select or implement algorithms
+5. **Experiment Configuration**: Set parameters and metrics
+
+#### Experiment Tracking with MLflow
+Track all aspects of your machine learning experiments:
+
+**Key Features:**
+- **Parameter Logging**: Track hyperparameters automatically
+- **Metric Recording**: Monitor training and validation metrics
+- **Artifact Storage**: Save models, plots, and data
+- **Experiment Comparison**: Compare multiple experiment runs
+- **Reproducibility**: Recreate exact experimental conditions
+
+**Usage Example:**
+```python
+import mlflow
+import mlflow.sklearn
+from fire_prediction_models import FireRiskModel
+
+with mlflow.start_run():
+    # Log parameters
+    mlflow.log_param("algorithm", "Random Forest")
+    mlflow.log_param("n_estimators", 100)
+    mlflow.log_param("max_depth", 10)
+    
+    # Train model
+    model = FireRiskModel(algorithm="rf", n_estimators=100)
+    model.fit(X_train, y_train)
+    
+    # Evaluate and log metrics
+    accuracy = model.score(X_test, y_test)
+    mlflow.log_metric("accuracy", accuracy)
+    
+    # Save model
+    mlflow.sklearn.log_model(model, "fire_risk_model")
+```
+
+#### Model Registry
+Manage model versions and deployment:
+
+**Features:**
+- **Version Control**: Track model evolution over time
+- **Stage Management**: Development → Staging → Production
+- **Model Lineage**: Track data and code dependencies
+- **Collaboration**: Share models across research teams
+- **Deployment Integration**: Seamless production deployment
+
+### 4. Research Environment
+
+#### Jupyter Hub Integration
+Access to fully-configured Jupyter notebooks:
+
+**Pre-installed Libraries:**
+- **Data Science**: pandas, numpy, scipy, scikit-learn
+- **Deep Learning**: TensorFlow, PyTorch, Keras
+- **Visualization**: matplotlib, seaborn, plotly
+- **Geospatial**: geopandas, rasterio, folium
+- **Fire Modeling**: Custom fire prediction libraries
+
+**GPU Access:**
+- **NVIDIA Tesla V100**: High-performance computing
+- **CUDA Support**: Accelerated deep learning
+- **Distributed Training**: Multi-GPU model training
+- **Resource Management**: Fair sharing across users
+
+#### Development Environment Features
+- **Version Control**: Integrated Git support
+- **Code Sharing**: Collaborative development tools
+- **Package Management**: Conda/pip environment management
+- **Debugging Tools**: Advanced debugging capabilities
+
+### 5. Available Datasets
+
+#### Fire Historical Data
+- **CAL FIRE Incidents**: Complete incident database (1999-2024)
+- **Fire Perimeters**: GIS polygons of fire boundaries
+- **Suppression Records**: Resource deployment and costs
+- **Damage Assessment**: Structure and vegetation impacts
+
+#### Weather & Climate
+- **ERA5 Reanalysis**: Global weather data (1979-2024)
+- **RTMA**: Real-time mesoscale analysis
+- **Fire Weather Indices**: NFDRS, Haines Index, FFMC
+- **Climate Projections**: Future climate scenarios
+
+#### Satellite & Remote Sensing
+- **MODIS**: Fire detection and land cover data
+- **VIIRS**: High-resolution active fire data
+- **Landsat**: Long-term vegetation monitoring
+- **GOES**: Real-time weather imagery
+
+#### Synthetic & Simulation Data
+- **Weather Simulation**: WRF model outputs
+- **Fire Spread Models**: FARSITE, FlamMap results
+- **Synthetic Scenarios**: Generated training data
+- **Monte Carlo Simulations**: Statistical fire behavior data
+
+### 6. Feature Engineering Tools
+
+#### Automated Feature Generation
+- **Temporal Features**: Time-based patterns and seasonality
+- **Spatial Features**: Geographic and topographic variables
+- **Weather Derivatives**: Fire weather indices and calculations
+- **Lag Features**: Historical values and trends
+
+#### Custom Feature Engineering
+```python
+from fire_features import FeatureEngine
+
+# Initialize feature engine
+fe = FeatureEngine()
+
+# Add temporal features
+fe.add_temporal_features(['month', 'day_of_year', 'season'])
+
+# Add weather derivatives
+fe.add_fire_weather_indices(['ffmc', 'dmc', 'dc', 'isi', 'bui'])
+
+# Add spatial features
+fe.add_spatial_features(['elevation', 'slope', 'aspect', 'fuel_type'])
+
+# Generate features
+X_features = fe.transform(raw_data)
+```
+
+#### Feature Selection
+- **Statistical Methods**: Correlation analysis, mutual information
+- **Model-based**: Feature importance from tree models
+- **Wrapper Methods**: Recursive feature elimination
+- **Embedded Methods**: L1/L2 regularization
+
+### 7. Model Development
+
+#### Pre-built Fire Prediction Models
+Access to tested fire prediction algorithms:
+
+**Classification Models:**
+- **Fire Occurrence**: Predict fire ignition probability
+- **Fire Size Class**: Predict fire size category
+- **Suppression Success**: Predict containment probability
+
+**Regression Models:**
+- **Fire Size**: Predict final fire size
+- **Suppression Cost**: Predict resource requirements
+- **Burn Probability**: Predict fire spread probability
+
+**Time Series Models:**
+- **Fire Activity**: Predict seasonal fire patterns
+- **Weather Patterns**: Forecast fire weather conditions
+- **Resource Demand**: Predict resource requirements
+
+#### Custom Model Development
+Framework for developing new algorithms:
+
+```python
+from fire_prediction_models import BaseFireModel
+import torch.nn as nn
+
+class CustomFireRiskModel(BaseFireModel):
+    def __init__(self, input_dim, hidden_dim=128):
+        super().__init__()
+        self.network = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(hidden_dim, 1),
+            nn.Sigmoid()
+        )
+    
+    def forward(self, x):
+        return self.network(x)
+    
+    def predict_fire_risk(self, weather_data, location_data):
+        # Custom prediction logic
+        features = self.prepare_features(weather_data, location_data)
+        return self.forward(features)
+```
+
+#### Model Validation
+Comprehensive validation framework:
+
+**Cross-Validation:**
+- **Time Series Split**: Respect temporal order
+- **Spatial Cross-Validation**: Account for spatial correlation
+- **Stratified Sampling**: Maintain class balance
+
+**Performance Metrics:**
+- **Classification**: Accuracy, Precision, Recall, F1, AUC-ROC
+- **Regression**: MSE, MAE, R², MAPE
+- **Fire-Specific**: Critical Success Index, Hit Rate, False Alarm Rate
+
+### 8. Deployment & Production
+
+#### Model Serving
+Deploy models to production environment:
+
+**Deployment Options:**
+- **REST API**: HTTP-based model serving
+- **Batch Processing**: Large-scale prediction jobs
+- **Real-time Streaming**: Live fire risk assessment
+- **Edge Deployment**: Field device integration
+
+**Example Deployment:**
+```python
+# Register model for deployment
+model_uri = f"models:/fire_risk_model/{version}"
+
+# Deploy to staging
+mlflow.deployments.create_deployment(
+    name="fire_risk_staging",
+    model_uri=model_uri,
+    target="kubernetes"
+)
+
+# Promote to production after validation
+mlflow.deployments.update_deployment(
+    name="fire_risk_production", 
+    model_uri=model_uri
+)
+```
+
+#### Model Monitoring
+Track model performance in production:
+
+- **Data Drift Detection**: Monitor input data changes
+- **Model Drift Detection**: Track prediction accuracy
+- **Performance Metrics**: Real-time model performance
+- **Alert System**: Notifications for model degradation
+
+### 9. Collaboration & Sharing
+
+#### Research Collaboration
+- **Shared Experiments**: Team access to experiments
+- **Model Sharing**: Cross-team model access
+- **Code Reviews**: Collaborative development
+- **Knowledge Base**: Shared research documentation
+
+#### Publication Support
+- **Research Papers**: Export results for academic publication
+- **Visualization**: High-quality plots and figures
+- **Reproducible Research**: Complete experiment documentation
+- **Dataset Citations**: Proper data source attribution
+
+### 10. Best Practices
+
+#### Experimental Design
+- **Hypothesis-Driven**: Start with clear research questions
+- **Controlled Experiments**: Isolate variables and effects
+- **Statistical Power**: Ensure adequate sample sizes
+- **Bias Mitigation**: Address sampling and selection biases
+
+#### Model Development
+- **Baseline Models**: Start with simple, interpretable models
+- **Feature Engineering**: Domain knowledge is crucial
+- **Cross-Validation**: Always validate with unseen data
+- **Interpretability**: Understand model decisions
+
+#### Production Deployment
+- **Testing**: Comprehensive testing before deployment
+- **Monitoring**: Continuous performance monitoring
+- **Rollback Plans**: Safe deployment strategies
+- **Documentation**: Complete model documentation
+
+---
+
+## Next Steps
+- Explore [ML Experiments](./ml-experiments.md) for detailed experiment management
+- Learn [Model Management](./model-management.md) for production deployment
+- Master [Research Tools](./research-tools.md) for advanced analysis techniques
+
+## Support
+- **Research Community**: Internal Slack channel #fire-science
+- **Technical Support**: ml-support@wildfire-intelligence.com
+- **Office Hours**: Weekly Q&A sessions with senior scientists
+- **Documentation**: Comprehensive API documentation and tutorials

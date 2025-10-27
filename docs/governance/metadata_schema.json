@@ -1,0 +1,316 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CAL FIRE Wildfire Data Asset Metadata Standard",
+  "description": "Comprehensive metadata schema for all wildfire intelligence data assets",
+  "version": "1.0.0",
+  "type": "object",
+  "required": [
+    "asset_id",
+    "source_id",
+    "classification",
+    "ingest_timestamp",
+    "retention_policy"
+  ],
+  "properties": {
+    "asset_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for the data asset (UUID v4)"
+    },
+    "source_id": {
+      "type": "string",
+      "enum": [
+        "firms_modis_terra",
+        "firms_modis_aqua",
+        "firms_viirs_snpp",
+        "firms_viirs_noaa20",
+        "firms_viirs_noaa21",
+        "firesat_detections",
+        "firesat_perimeters",
+        "firesat_thermal",
+        "landsat_nrt",
+        "sentinel3_slstr",
+        "noaa_gfs_forecast",
+        "noaa_nam_forecast",
+        "noaa_alerts_active",
+        "era5_reanalysis",
+        "metar_observations",
+        "airnow_observations",
+        "purpleair_sensors",
+        "iot_weather_stations",
+        "iot_soil_moisture"
+      ],
+      "description": "Data source identifier from the ingestion system"
+    },
+    "classification": {
+      "type": "string",
+      "enum": ["public", "internal", "restricted", "regulated"],
+      "description": "Security classification level"
+    },
+    "sensitivity": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "critical"],
+      "description": "Data sensitivity level for access control"
+    },
+    "ingest_timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when data was ingested (Pacific Time)"
+    },
+    "detection_timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of actual fire detection or observation"
+    },
+    "geospatial_extent": {
+      "type": "object",
+      "description": "Geographic bounding box of the data",
+      "required": ["min_lat", "max_lat", "min_lon", "max_lon"],
+      "properties": {
+        "min_lat": {"type": "number", "minimum": -90, "maximum": 90},
+        "max_lat": {"type": "number", "minimum": -90, "maximum": 90},
+        "min_lon": {"type": "number", "minimum": -180, "maximum": 180},
+        "max_lon": {"type": "number", "minimum": -180, "maximum": 180},
+        "crs": {"type": "string", "default": "EPSG:4326"}
+      }
+    },
+    "data_quality": {
+      "type": "object",
+      "description": "Data quality metrics",
+      "properties": {
+        "completeness": {"type": "number", "minimum": 0, "maximum": 1},
+        "accuracy": {"type": "number", "minimum": 0, "maximum": 1},
+        "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
+        "validation_status": {"type": "string", "enum": ["passed", "failed", "pending"]},
+        "quality_score": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+    "checksum": {
+      "type": "object",
+      "description": "Integrity verification checksums",
+      "required": ["algorithm", "value"],
+      "properties": {
+        "algorithm": {"type": "string", "enum": ["SHA-256", "SHA-512", "MD5"]},
+        "value": {"type": "string"},
+        "verified_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "retention_policy": {
+      "type": "string",
+      "enum": [
+        "hot_7d",
+        "warm_90d",
+        "cold_365d",
+        "archive_7y",
+        "permanent",
+        "legal_hold"
+      ],
+      "description": "Data retention and lifecycle policy identifier"
+    },
+    "storage_tier": {
+      "type": "string",
+      "enum": ["hot", "warm", "cold", "archive"],
+      "description": "Current storage tier placement"
+    },
+    "storage_location": {
+      "type": "object",
+      "description": "Physical/logical storage locations",
+      "properties": {
+        "primary": {"type": "string", "description": "Primary storage URI"},
+        "replicas": {"type": "array", "items": {"type": "string"}},
+        "backup": {"type": "string", "description": "Backup storage URI"}
+      }
+    },
+    "format": {
+      "type": "object",
+      "description": "Data format specifications",
+      "properties": {
+        "mime_type": {"type": "string"},
+        "encoding": {"type": "string"},
+        "compression": {"type": "string", "enum": ["none", "gzip", "bzip2", "lz4", "snappy"]},
+        "schema_version": {"type": "string"}
+      }
+    },
+    "lineage": {
+      "type": "object",
+      "description": "Data lineage and provenance",
+      "properties": {
+        "upstream_sources": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "UUIDs of parent/source data assets"
+        },
+        "transformations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "operation": {"type": "string"},
+              "timestamp": {"type": "string", "format": "date-time"},
+              "operator": {"type": "string"}
+            }
+          }
+        },
+        "processing_pipeline": {"type": "string"}
+      }
+    },
+    "access_control": {
+      "type": "object",
+      "description": "Access control metadata",
+      "properties": {
+        "owner": {"type": "string", "description": "Data owner user/team"},
+        "steward": {"type": "string", "description": "Data steward responsible"},
+        "authorized_users": {"type": "array", "items": {"type": "string"}},
+        "authorized_groups": {"type": "array", "items": {"type": "string"}},
+        "last_accessed": {"type": "string", "format": "date-time"},
+        "access_count": {"type": "integer", "minimum": 0}
+      }
+    },
+    "compliance": {
+      "type": "object",
+      "description": "Regulatory compliance metadata",
+      "properties": {
+        "regulations": {
+          "type": "array",
+          "items": {"type": "string", "enum": ["FISMA", "CCPA", "SOC2", "NIST-800-53"]}
+        },
+        "retention_legal_hold": {"type": "boolean"},
+        "pii_present": {"type": "boolean"},
+        "encryption_required": {"type": "boolean"},
+        "audit_required": {"type": "boolean"}
+      }
+    },
+    "technical_metadata": {
+      "type": "object",
+      "description": "Technical characteristics",
+      "properties": {
+        "size_bytes": {"type": "integer", "minimum": 0},
+        "record_count": {"type": "integer", "minimum": 0},
+        "column_count": {"type": "integer", "minimum": 0},
+        "database_table": {"type": "string"},
+        "partition_key": {"type": "string"},
+        "index_keys": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "business_metadata": {
+      "type": "object",
+      "description": "Business context",
+      "properties": {
+        "domain": {"type": "string", "enum": ["fire_detection", "weather", "sensors", "imagery"]},
+        "use_case": {"type": "string"},
+        "criticality": {"type": "string", "enum": ["low", "medium", "high", "mission_critical"]},
+        "cost_center": {"type": "string"},
+        "project_code": {"type": "string"}
+      }
+    },
+    "version": {
+      "type": "object",
+      "description": "Versioning information",
+      "properties": {
+        "version_number": {"type": "string"},
+        "created_at": {"type": "string", "format": "date-time"},
+        "created_by": {"type": "string"},
+        "changelog": {"type": "string"}
+      }
+    },
+    "tags": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Freeform tags for discovery and organization"
+    }
+  },
+  "examples": [
+    {
+      "asset_id": "550e8400-e29b-41d4-a716-446655440000",
+      "source_id": "firms_modis_terra",
+      "classification": "internal",
+      "sensitivity": "medium",
+      "ingest_timestamp": "2025-10-06T05:30:00-07:00",
+      "detection_timestamp": "2025-10-06T05:15:00-07:00",
+      "geospatial_extent": {
+        "min_lat": 36.5,
+        "max_lat": 40.0,
+        "min_lon": -122.0,
+        "max_lon": -118.0,
+        "crs": "EPSG:4326"
+      },
+      "data_quality": {
+        "completeness": 0.98,
+        "accuracy": 0.95,
+        "confidence": 85,
+        "validation_status": "passed",
+        "quality_score": 0.96
+      },
+      "checksum": {
+        "algorithm": "SHA-256",
+        "value": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "verified_at": "2025-10-06T05:30:05-07:00"
+      },
+      "retention_policy": "warm_90d",
+      "storage_tier": "warm",
+      "storage_location": {
+        "primary": "postgresql://wildfire-postgres/wildfire_db/firms_modis_terra_detections",
+        "replicas": ["s3://wildfire-backup/firms/2025/10/06/"],
+        "backup": "minio://wildfire-minio/backup/firms_modis_terra/"
+      },
+      "format": {
+        "mime_type": "application/x-postgresql",
+        "encoding": "UTF-8",
+        "compression": "none",
+        "schema_version": "1.0"
+      },
+      "lineage": {
+        "upstream_sources": [],
+        "transformations": [
+          {
+            "operation": "coordinate_validation",
+            "timestamp": "2025-10-06T05:30:01-07:00",
+            "operator": "data-ingestion-service"
+          },
+          {
+            "operation": "timezone_conversion_to_pst",
+            "timestamp": "2025-10-06T05:30:02-07:00",
+            "operator": "data-ingestion-service"
+          }
+        ],
+        "processing_pipeline": "kafka-consumer-v1.0"
+      },
+      "access_control": {
+        "owner": "calfire-data-team",
+        "steward": "fire-intelligence-lead",
+        "authorized_groups": ["fire-chiefs", "analysts", "scientists"],
+        "last_accessed": "2025-10-06T05:35:00-07:00",
+        "access_count": 142
+      },
+      "compliance": {
+        "regulations": ["FISMA", "NIST-800-53"],
+        "retention_legal_hold": false,
+        "pii_present": false,
+        "encryption_required": true,
+        "audit_required": true
+      },
+      "technical_metadata": {
+        "size_bytes": 2048,
+        "record_count": 1,
+        "column_count": 17,
+        "database_table": "firms_modis_terra_detections",
+        "partition_key": "timestamp",
+        "index_keys": ["timestamp", "latitude", "longitude", "confidence"]
+      },
+      "business_metadata": {
+        "domain": "fire_detection",
+        "use_case": "real-time-fire-monitoring",
+        "criticality": "mission_critical",
+        "cost_center": "CC-FIRE-OPS-2025",
+        "project_code": "CALFIRE-WIP-001"
+      },
+      "version": {
+        "version_number": "1.0.0",
+        "created_at": "2025-10-06T05:30:00-07:00",
+        "created_by": "data-ingestion-service",
+        "changelog": "Initial ingestion from NASA FIRMS"
+      },
+      "tags": ["wildfire", "satellite", "modis", "california", "real-time", "nasa-firms"]
+    }
+  ]
+}

@@ -1,0 +1,200 @@
+# Streaming Configuration for Data Ingestion Service
+# Includes critical alert handling and offline buffering settings
+
+# Critical Alert Configuration
+critical_alerts:
+  enabled: true
+  kafka_topic: wildfire-critical-alerts
+  max_latency_ms: 100
+  heartbeat_interval: 30
+  reconnect_delay_base: 1
+  reconnect_delay_max: 60
+
+  # Critical sources that bypass queue system
+  critical_sources:
+    - evacuation_alerts
+    - first_responder_updates
+    - imminent_threat_detection
+    - emergency_broadcast_system
+    - critical_fire_alerts
+    - life_safety_warnings
+
+# Offline Buffering Configuration
+offline_buffering:
+  enabled: true
+  buffer_dir: ./buffers
+  default_max_size: 10000
+  flush_batch_size: 100
+  persist_interval: 100
+  ttl_hours: 24
+
+  # Connector-specific settings
+  connectors:
+    iot_mqtt:
+      enabled: true
+      max_size: 15000
+      priority: 10  # High priority for IoT data
+      persist_path: ./buffers/iot_mqtt.pkl
+
+    noaa_weather:
+      enabled: true
+      max_size: 10000
+      priority: 5
+      persist_path: ./buffers/noaa_weather.pkl
+
+    purpleair:
+      enabled: true
+      max_size: 5000
+      priority: 3
+      persist_path: ./buffers/purpleair.pkl
+
+# Stream Manager Configuration
+stream_manager:
+  max_concurrent_streams: 50
+  health_check_interval: 30
+  metrics_export_interval: 10
+
+  # Routing rules
+  routing:
+    critical_threshold_ms: 1000
+    batch_threshold_size: 1000
+    default_queue_size: 10000
+
+  # Auto-start configuration
+  auto_start:
+    enabled: true
+    sources:
+      - firms_active_fires
+      - noaa_weather_current
+      - iot_mqtt_sensors
+      - purpleair_air_quality
+
+# Kafka Producer Configuration - OPTIMIZED FOR 10K-20K EVENTS/SEC
+kafka_producer:
+  bootstrap_servers: kafka:29092
+  compression_type: gzip  # Changed back to gzip for aiokafka 0.10.0 compatibility
+  compression_level: 3    # Balanced: 1=fastest, 22=highest compression, default=3
+  batch_size: 32768      # Increased from 16384 for better batching
+  linger_ms: 100
+  max_request_size: 2097152  # 2MB for large messages
+
+  # Optimized partition configuration (Total: ~85 partitions for single broker)
+  partition_config:
+    # Critical Alert Topics (3 partitions each for ordered processing)
+    wildfire-critical-alerts: 3
+    wildfire-evacuation-orders: 3
+
+    # High-Volume Streaming Topics (12-16 partitions)
+    wildfire-iot-sensors: 16        # Highest volume - thousands of sensors
+    wildfire-weather-data: 12       # Multiple sources, 30-sec updates
+    wildfire-weather-processed: 12  # Match input for pipeline consistency
+
+    # Moderate-Volume Topics (6-8 partitions)
+    wildfire-nasa-firms: 6          # Satellite passes every 15 min
+    wildfire-weather-bulk: 8        # Large GRIB files need parallelism
+    wildfire-air-quality: 6         # PurpleAir + AirNow sensors
+
+    # Satellite/Imagery Topics (4-10 partitions based on size)
+    wildfire-satellite-raw: 8       # Raw ingestion
+    wildfire-satellite-processed: 6 # After processing
+    wildfire-satellite-imagery-binary: 10    # Large binary files
+    wildfire-satellite-imagery-chunks: 8     # Chunked transmission
+    wildfire-satellite-imagery-metadata: 4   # Small JSON only
+
+    # Processing Pipeline Topics (4-8 partitions)
+    wildfire-sensors-processed: 8   # Aggregated sensor data
+    wildfire-alerts-generated: 4    # System alerts
+    wildfire-fire-predictions: 6    # ML model outputs
+
+    # Dead Letter Queue Topics (3 partitions)
+    wildfire-dlq-failed-messages: 3
+    wildfire-dlq-retry-queue: 3
+
+    # Social Media Topics (4 partitions)
+    wildfire-social-raw: 4
+    wildfire-social-processed: 4
+
+  # Critical alert producer (no batching)
+  critical:
+    compression_type: none
+    batch_size: 1
+    linger_ms: 0
+    acks: 1
+    max_in_flight_requests: 1
+
+  # Data type specific compression settings
+  data_type_compression:
+    iot_sensors:
+      compression_type: gzip
+      compression_level: 1  # Fastest for real-time IoT data
+    weather_bulk:
+      compression_type: gzip
+      compression_level: 6  # Higher compression for bulk weather data
+    nasa_firms:
+      compression_type: gzip
+      compression_level: 3  # Balanced for FIRMS data
+    satellite_imagery:
+      compression_type: snappy  # Better for binary imagery data (legacy topic)
+    satellite_imagery_metadata:
+      compression_type: gzip  # Changed from zstd for aiokafka compatibility
+      compression_level: 3
+      max_message_bytes: 1048576  # 1MB for metadata only
+    satellite_imagery_binary:
+      compression_type: gzip  # Changed from zstd for aiokafka compatibility
+      compression_level: 1  # Fast compression for binary data
+      max_message_bytes: 20971520  # 20MB for direct binary transmission
+    satellite_imagery_chunks:
+      compression_type: gzip
+      compression_level: 1  # Fast for time-sensitive reassembly
+      max_message_bytes: 10485760  # 10MB chunks for safer transmission
+    evacuation_alerts:
+      compression_type: none  # No compression for critical alerts
+
+# Performance Tuning
+performance:
+  enable_direct_path: true
+  enable_buffering: true
+  enable_compression: true
+  enable_batch_processing: true
+
+  # Memory management
+  max_memory_mb: 1024
+  buffer_memory_mb: 256
+
+  # Thread pools
+  io_threads: 8
+  processing_threads: 16
+
+# Monitoring Configuration
+monitoring:
+  prometheus_port: 8888
+  health_check_port: 8003
+
+  # Metrics to track
+  metrics:
+    - ingestion_latency
+    - throughput_events_per_second
+    - buffer_utilization
+    - critical_alert_latency
+    - connection_health
+    - error_rate
+
+  # Alerting thresholds
+  alerts:
+    high_latency_ms: 5000
+    buffer_full_percent: 90
+    error_rate_percent: 5
+    disconnection_duration_minutes: 5
+
+# Logging Configuration
+logging:
+  level: INFO
+  format: json
+
+  # Log specific events
+  log_events:
+    - critical_alerts
+    - buffer_overflow
+    - connection_loss
+    - flush_operations
+    - health_checks

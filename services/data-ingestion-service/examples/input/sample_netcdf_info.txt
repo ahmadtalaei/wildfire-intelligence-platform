@@ -1,0 +1,172 @@
+NetCDF File Information - ERA5 Reanalysis Weather Data
+======================================================
+
+File: ERA5_California_20250104_surface_analysis.nc
+Source: Copernicus Climate Data Store (CDS) - ERA5 Reanalysis
+Data Product: ERA5 hourly data on single levels
+Temporal Coverage: 2025-01-04 00:00 to 2025-01-04 23:00 UTC (24 hours)
+Spatial Coverage: California Bounding Box
+Geographic Extent:
+  - North: 42.0°N
+  - South: 32.5°N
+  - East: -114.1°W
+  - West: -124.4°W
+
+File Attributes:
+---------------
+Format: NetCDF-4 (HDF5)
+File Size: 487.3 MB
+Conventions: CF-1.6
+Institution: ECMWF (European Centre for Medium-Range Weather Forecasts)
+Source: ERA5 reanalysis
+History: Created 2025-01-05 02:34:12 UTC
+
+Dimensions:
+----------
+time: 24 (hours)
+latitude: 96 points (0.25° resolution)
+longitude: 104 points (0.25° resolution)
+level: 1 (surface)
+
+Total Grid Points: 239,616 per timestep
+Total Data Points: 5,750,784 (24 timesteps)
+
+Variables (18 total):
+--------------------
+
+1. t2m - 2-metre temperature
+   Units: K
+   Long Name: 2 metre temperature
+   Range: 268.4 - 298.7 K
+   Mean: 283.5 K (10.4°C)
+
+2. d2m - 2-metre dewpoint temperature
+   Units: K
+   Long Name: 2 metre dewpoint temperature
+   Range: 245.2 - 285.3 K
+   Mean: 270.8 K (-2.4°C)
+
+3. u10 - 10-metre U wind component
+   Units: m/s
+   Long Name: 10 metre U wind component
+   Range: -18.3 - 15.7 m/s
+   Mean: -2.1 m/s (westerly component)
+
+4. v10 - 10-metre V wind component
+   Units: m/s
+   Long Name: 10 metre V wind component
+   Range: -12.4 - 14.2 m/s
+   Mean: 1.8 m/s (southerly component)
+
+5. sp - Surface pressure
+   Units: Pa
+   Long Name: Surface pressure
+   Range: 85,420 - 103,240 Pa
+   Mean: 98,750 Pa
+
+6. tp - Total precipitation
+   Units: m
+   Long Name: Total precipitation
+   Range: 0 - 0.0047 m
+   Mean: 0.00012 m (0.12 mm/hour)
+
+7. rh - Relative humidity
+   Units: %
+   Long Name: Relative humidity
+   Range: 12.4 - 98.7%
+   Mean: 52.3%
+
+8. blh - Boundary layer height
+   Units: m
+   Long Name: Boundary layer height
+   Range: 85 - 2,847 m
+   Mean: 542 m
+
+9. cape - Convective available potential energy
+   Units: J/kg
+   Long Name: Convective available potential energy
+   Range: 0 - 847 J/kg
+   Mean: 42 J/kg
+
+10. ssrd - Surface solar radiation downwards
+    Units: J/m²
+    Long Name: Surface solar radiation downwards
+    Range: 0 - 2,847,320 J/m²
+    Daily Total: ~18.5 MJ/m²
+
+11. swvl1 - Soil water volume layer 1 (0-7 cm)
+    Units: m³/m³
+    Long Name: Volumetric soil water layer 1
+    Range: 0.08 - 0.42 m³/m³
+    Mean: 0.18 m³/m³
+
+12. fal - Forecast albedo
+    Units: (0-1)
+    Long Name: Forecast albedo
+    Range: 0.12 - 0.35
+    Mean: 0.19
+
+Fire Weather Indices (Derived):
+-------------------------------
+
+13. fwi - Fire Weather Index
+    Units: dimensionless
+    Range: 2.1 - 28.4
+    Mean: 8.7
+    Critical Areas (FWI > 20): 847 grid points
+
+14. ffmc - Fine Fuel Moisture Code
+    Units: dimensionless
+    Range: 72.4 - 94.8
+    Mean: 84.2
+
+15. dmc - Duff Moisture Code
+    Units: dimensionless
+    Range: 15.3 - 42.7
+    Mean: 24.8
+
+Coordinate Reference System:
+---------------------------
+Grid Mapping: latitude_longitude
+Prime Meridian: Greenwich
+Semi-major axis: 6378137.0 m
+Inverse flattening: 298.257223563
+
+Time Coordinate:
+---------------
+Calendar: gregorian
+Units: hours since 1900-01-01 00:00:00
+Values: 1095720 to 1095743 (2025-01-04 00:00 to 23:00 UTC)
+
+Quality Flags:
+-------------
+Missing Values: 0.02% (over water/edge artifacts)
+Fill Value: -32767
+Valid Range Check: PASS
+Temporal Continuity: PASS
+Spatial Continuity: PASS
+
+High Fire Risk Conditions Detected:
+-----------------------------------
+Timesteps with FWI > 15: 8 hours (12:00-19:00 UTC)
+Maximum Wind Speed: 23.4 m/s (52.3 mph) at 15:00 UTC
+Minimum Relative Humidity: 12.4% at 16:00 UTC
+Hottest Temperature: 298.7 K (25.6°C) at 17:00 UTC
+Driest Soil Moisture: 0.08 m³/m³ (very dry)
+
+Critical Fire Weather Grid Cells: 847
+Location of Highest Risk:
+  - Latitude: 39.75°N
+  - Longitude: -121.50°W
+  - Time: 2025-01-04 16:00 UTC
+  - FWI: 28.4
+  - Wind Speed: 21.7 m/s
+  - Relative Humidity: 14.2%
+  - Temperature: 297.3 K (24.2°C)
+
+Processing Information:
+----------------------
+Downloaded: 2025-01-05 01:45:23 UTC
+Processing Time: 12.4 minutes
+Compression: Level 4 (deflate)
+Checksum (MD5): 7f8a9c2d4e1b6f3a5c8d9e0f1a2b3c4d

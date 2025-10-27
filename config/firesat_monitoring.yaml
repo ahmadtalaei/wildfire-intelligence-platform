@@ -1,0 +1,442 @@
+# FireSat Monitoring and Alerting Configuration
+# This file configures monitoring metrics, alert rules, and dashboards for FireSat data ingestion
+
+# =============================================================================
+# Prometheus Metrics Configuration
+# =============================================================================
+
+prometheus:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+  # FireSat-specific metrics
+  metrics:
+    - name: firesat_detections_total
+      type: counter
+      help: Total number of FireSat fire detections ingested
+      labels:
+        - source_id
+        - satellite_id
+        - confidence_tier  # high, medium, low
+
+    - name: firesat_ingestion_latency_seconds
+      type: histogram
+      help: Time taken to ingest FireSat data
+      buckets: [0.1, 0.5, 1.0, 2.5, 5.0, 10.0]
+      labels:
+        - source_id
+        - operation  # fetch, parse, validate, store
+
+    - name: firesat_data_quality_score
+      type: gauge
+      help: Average data quality score (0-1)
+      labels:
+        - source_id
+        - time_window  # 1h, 24h, 7d
+
+    - name: firesat_api_requests_total
+      type: counter
+      help: Total API requests to FireSat
+      labels:
+        - endpoint
+        - status_code
+        - mock_mode
+
+    - name: firesat_api_errors_total
+      type: counter
+      help: Total API errors
+      labels:
+        - endpoint
+        - error_type
+
+    - name: firesat_anomaly_detections_total
+      type: counter
+      help: Number of anomalous detections flagged
+      labels:
+        - anomaly_type  # unusual_brightness, extreme_frp, large_area, etc.
+
+    - name: firesat_satellite_coverage
+      type: gauge
+      help: Number of active satellites providing coverage
+      labels:
+        - region  # california, western_us, etc.
+
+    - name: firesat_stream_status
+      type: gauge
+      help: Status of FireSat streams (1=active, 0=stopped)
+      labels:
+        - stream_id
+        - source_id
+
+    - name: firesat_records_per_minute
+      type: gauge
+      help: Ingestion rate (records per minute)
+      labels:
+        - source_id
+
+# =============================================================================
+# Alert Rules
+# =============================================================================
+
+alert_rules:
+
+  # High-severity alerts
+  - name: FireSatIngestionStopped
+    severity: critical
+    condition: |
+      rate(firesat_detections_total[5m]) == 0
+    duration: 10m
+    annotations:
+      summary: "FireSat data ingestion has stopped"
+      description: "No FireSat detections received in the last 10 minutes. Check connector health and API connectivity."
+    labels:
+      service: data-ingestion
+      component: firesat_connector
+    actions:
+      - send_email
+      - send_pagerduty
+      - send_slack
+
+  - name: FireSatAPIErrors
+    severity: critical
+    condition: |
+      rate(firesat_api_errors_total[5m]) > 0.1
+    duration: 5m
+    annotations:
+      summary: "High FireSat API error rate"
+      description: "FireSat API error rate exceeds 10% over 5 minutes. Check API status and credentials."
+    actions:
+      - send_email
+      - send_slack
+
+  - name: FireSatHighLatency
+    severity: warning
+    condition: |
+      histogram_quantile(0.95, firesat_ingestion_latency_seconds) > 10
+    duration: 5m
+    annotations:
+      summary: "FireSat ingestion latency is high"
+      description: "P95 latency exceeds 10 seconds. Check network connectivity and database performance."
+    actions:
+      - send_slack
+
+  # Medium-severity alerts
+  - name: FireSatLowDataQuality
+    severity: warning
+    condition: |
+      firesat_data_quality_score < 0.7
+    duration: 30m
+    annotations:
+      summary: "FireSat data quality is degraded"
+      description: "Average quality score below 0.7 for 30 minutes. Review validation rules and source data."
+    actions:
+      - send_email
+      - send_slack
+
+  - name: FireSatHighAnomalyRate
+    severity: warning
+    condition: |
+      rate(firesat_anomaly_detections_total[1h]) > 0.2
+    duration: 1h
+    annotations:
+      summary: "High rate of anomalous FireSat detections"
+      description: "More than 20% of detections flagged as anomalous. Investigate data source or validation logic."
+    actions:
+      - send_slack
+
+  - name: FireSatStreamInactive
+    severity: warning
+    condition: |
+      firesat_stream_status == 0
+    duration: 5m
+    annotations:
+      summary: "FireSat stream is inactive"
+      description: "One or more FireSat streams have stopped. Check stream manager."
+    actions:
+      - send_slack
+
+  # Low-severity alerts
+  - name: FireSatReducedCoverage
+    severity: info
+    condition: |
+      firesat_satellite_coverage < 30
+    duration: 1h
+    annotations:
+      summary: "FireSat satellite coverage reduced"
+      description: "Fewer than 30 satellites providing coverage. Normal during maintenance windows."
+    actions:
+      - send_slack
+
+  - name: FireSatMockModeActive
+    severity: info
+    condition: |
+      firesat_api_requests_total{mock_mode="true"} > 0
+    duration: 1h
+    annotations:
+      summary: "FireSat connector running in mock mode"
+      description: "Connector is generating simulated data. Add FIRESAT_API_KEY to use real data."
+    actions:
+      - send_slack
+
+# =============================================================================
+# Grafana Dashboard Configuration
+# =============================================================================
+
+grafana_dashboards:
+
+  - name: FireSat Overview
+    uid: firesat-overview
+    panels:
+
+      - title: "Total Detections (24h)"
+        type: stat
+        query: |
+          sum(increase(firesat_detections_total[24h]))
+        thresholds:
+          - color: green
+            value: 0
+          - color: yellow
+            value: 100
+          - color: red
+            value: 1000
+
+      - title: "Detections Over Time"
+        type: graph
+        query: |
+          rate(firesat_detections_total[5m]) * 60
+        legend: "Detections per minute"
+
+      - title: "Data Quality Score"
+        type: gauge
+        query: |
+          avg(firesat_data_quality_score)
+        min: 0
+        max: 1
+        thresholds:
+          - color: red
+            value: 0
+          - color: yellow
+            value: 0.7
+          - color: green
+            value: 0.9
+
+      - title: "API Request Rate"
+        type: graph
+        query: |
+          sum(rate(firesat_api_requests_total[5m])) by (endpoint)
+
+      - title: "Ingestion Latency (P95)"
+        type: graph
+        query: |
+          histogram_quantile(0.95, firesat_ingestion_latency_seconds)
+
+      - title: "Active Satellites"
+        type: stat
+        query: |
+          firesat_satellite_coverage{region="california"}
+
+      - title: "Confidence Distribution"
+        type: pie
+        query: |
+          sum(firesat_detections_total) by (confidence_tier)
+
+      - title: "Anomaly Rate"
+        type: graph
+        query: |
+          rate(firesat_anomaly_detections_total[5m]) by (anomaly_type)
+
+      - title: "Stream Status"
+        type: table
+        query: |
+          firesat_stream_status
+
+  - name: FireSat Data Quality
+    uid: firesat-quality
+    panels:
+
+      - title: "Quality Score by Source"
+        type: graph
+        query: |
+          firesat_data_quality_score by (source_id)
+
+      - title: "Anomaly Types"
+        type: bar
+        query: |
+          sum(firesat_anomaly_detections_total) by (anomaly_type)
+
+      - title: "Confidence Tiers"
+        type: pie
+        query: |
+          sum(firesat_detections_total) by (confidence_tier)
+
+      - title: "Failed Validations"
+        type: stat
+        query: |
+          sum(increase(firesat_validation_failures_total[24h]))
+
+# =============================================================================
+# Alert Destinations
+# =============================================================================
+
+alert_destinations:
+
+  email:
+    enabled: true
+    recipients:
+      - ops@example.com
+      - firewatch@example.com
+    smtp_host: smtp.example.com
+    smtp_port: 587
+    from: alerts@wildfire-platform.example.com
+
+  slack:
+    enabled: true
+    webhook_url: ${SLACK_WEBHOOK_URL}
+    channel: "#firesat-alerts"
+    username: "FireSat Monitor"
+    icon_emoji: ":fire:"
+
+  pagerduty:
+    enabled: false
+    integration_key: ${PAGERDUTY_INTEGRATION_KEY}
+    severity_mapping:
+      critical: critical
+      warning: warning
+      info: info
+
+# =============================================================================
+# Health Check Configuration
+# =============================================================================
+
+health_checks:
+
+  - name: firesat_connector_health
+    endpoint: http://localhost:8000/health
+    interval: 30s
+    timeout: 5s
+    expected_status: 200
+    expected_body_contains: "firesat"
+
+  - name: firesat_database_connection
+    type: postgres
+    connection_string: ${DATABASE_URL}
+    query: "SELECT COUNT(*) FROM firesat_detections WHERE timestamp > NOW() - INTERVAL '5 minutes'"
+    interval: 1m
+    timeout: 10s
+
+  - name: firesat_kafka_producer
+    type: kafka
+    broker: ${KAFKA_BOOTSTRAP_SERVERS}
+    topic: firesat.detections
+    interval: 1m
+    timeout: 5s
+
+# =============================================================================
+# Data Quality Monitoring
+# =============================================================================
+
+data_quality_checks:
+
+  - name: detection_completeness
+    description: "Check that detections have all required fields"
+    query: |
+      SELECT
+        COUNT(*) as total,
+        COUNT(CASE WHEN latitude IS NULL THEN 1 END) as missing_latitude,
+        COUNT(CASE WHEN longitude IS NULL THEN 1 END) as missing_longitude,
+        COUNT(CASE WHEN confidence IS NULL THEN 1 END) as missing_confidence
+      FROM firesat_detections
+      WHERE timestamp > NOW() - INTERVAL '1 hour'
+    threshold: 0.01  # Max 1% missing fields
+    interval: 1h
+
+  - name: detection_validity
+    description: "Check that detections are within expected ranges"
+    query: |
+      SELECT
+        COUNT(CASE WHEN confidence < 0 OR confidence > 1 THEN 1 END) as invalid_confidence,
+        COUNT(CASE WHEN brightness_kelvin < 200 OR brightness_kelvin > 2000 THEN 1 END) as invalid_brightness,
+        COUNT(CASE WHEN fire_radiative_power < 0 THEN 1 END) as invalid_frp
+      FROM firesat_detections
+      WHERE timestamp > NOW() - INTERVAL '1 hour'
+    threshold: 0.001  # Max 0.1% invalid values
+    interval: 1h
+
+  - name: california_bounds_check
+    description: "Verify detections are within California bounds"
+    query: |
+      SELECT COUNT(*)
+      FROM firesat_detections
+      WHERE timestamp > NOW() - INTERVAL '1 hour'
+        AND (latitude < 32.5 OR latitude > 42.0
+             OR longitude < -124.5 OR longitude > -114.1)
+    threshold: 0  # No detections should be outside CA
+    interval: 1h
+
+# =============================================================================
+# Performance Monitoring
+# =============================================================================
+
+performance_monitoring:
+
+  - metric: ingestion_throughput
+    description: "Records ingested per second"
+    target: 100  # Target 100 records/sec
+    alert_below: 10  # Alert if below 10 records/sec
+
+  - metric: database_write_latency
+    description: "Time to write to TimescaleDB"
+    target: 100  # Target 100ms
+    alert_above: 1000  # Alert if above 1 second
+
+  - metric: kafka_publish_latency
+    description: "Time to publish to Kafka"
+    target: 50  # Target 50ms
+    alert_above: 500  # Alert if above 500ms
+
+# =============================================================================
+# Log Aggregation
+# =============================================================================
+
+log_aggregation:
+
+  sources:
+    - service: data-ingestion-service
+      log_path: /var/log/wildfire/data-ingestion-service.log
+      filters:
+        - "firesat"
+        - "FireSat"
+
+  patterns:
+    - name: firesat_errors
+      pattern: 'ERROR.*firesat'
+      severity: error
+      alert_threshold: 10  # Alert if >10 errors in 5 minutes
+
+    - name: firesat_warnings
+      pattern: 'WARN.*firesat'
+      severity: warning
+      alert_threshold: 50
+
+    - name: mock_mode_active
+      pattern: 'FireSat.*MOCK MODE'
+      severity: info
+
+# =============================================================================
+# Retention Policies
+# =============================================================================
+
+retention:
+
+  metrics:
+    raw: 7d  # Keep raw metrics for 7 days
+    aggregated_5m: 30d  # Keep 5-minute aggregates for 30 days
+    aggregated_1h: 90d  # Keep hourly aggregates for 90 days
+    aggregated_1d: 2y  # Keep daily aggregates for 2 years
+
+  logs:
+    debug: 1d
+    info: 7d
+    warning: 30d
+    error: 90d
+    critical: 1y

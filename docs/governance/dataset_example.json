@@ -1,0 +1,149 @@
+{
+  "asset_id": "a7f8d9e2-4c1b-4a5e-9f3d-8b2e6c4a1f7d",
+  "source_id": "firms_modis_terra",
+  "classification": "internal",
+  "sensitivity": "medium",
+  "ingest_timestamp": "2025-10-06T02:55:28-07:00",
+  "detection_timestamp": "2025-10-05T21:59:00-07:00",
+  "geospatial_extent": {
+    "min_lat": 41.47859,
+    "max_lat": 41.47859,
+    "min_lon": -119.2697,
+    "max_lon": -119.2697,
+    "crs": "EPSG:4326"
+  },
+  "data_quality": {
+    "completeness": 1.0,
+    "accuracy": 0.95,
+    "confidence": 0,
+    "validation_status": "passed",
+    "quality_score": 0.98
+  },
+  "checksum": {
+    "algorithm": "SHA-256",
+    "value": "7a3f8d9e2c1b4a5e9f3d8b2e6c4a1f7d5e9f3d8b2e6c4a1f7d5e9f3d8b2e6c4a",
+    "verified_at": "2025-10-06T02:55:29-07:00"
+  },
+  "retention_policy": "warm_90d",
+  "storage_tier": "hot",
+  "storage_location": {
+    "primary": "postgresql://wildfire-postgres:5432/wildfire_db/firms_modis_terra_detections/159",
+    "replicas": [
+      "s3://wildfire-backup-us-west-2/firms/2025/10/05/159.json",
+      "azure://wildfire-archive/firms/2025/10/159.parquet"
+    ],
+    "backup": "minio://wildfire-minio:9000/backup/firms_modis_terra/2025-10-05/159.json"
+  },
+  "format": {
+    "mime_type": "application/x-postgresql-record",
+    "encoding": "UTF-8",
+    "compression": "none",
+    "schema_version": "1.0"
+  },
+  "lineage": {
+    "upstream_sources": [
+      "nasa-firms-api-modis-c6.1-nrt"
+    ],
+    "transformations": [
+      {
+        "operation": "coordinate_validation",
+        "timestamp": "2025-10-06T02:55:28.1-07:00",
+        "operator": "data-ingestion-service-v1.2.3"
+      },
+      {
+        "operation": "timezone_conversion_utc_to_pst",
+        "timestamp": "2025-10-06T02:55:28.2-07:00",
+        "operator": "data-ingestion-service-v1.2.3"
+      },
+      {
+        "operation": "california_boundary_filter",
+        "timestamp": "2025-10-06T02:55:28.3-07:00",
+        "operator": "data-ingestion-service-v1.2.3"
+      },
+      {
+        "operation": "duplicate_detection_check",
+        "timestamp": "2025-10-06T02:55:28.4-07:00",
+        "operator": "kafka-consumer-v2.1.0"
+      },
+      {
+        "operation": "anomaly_detection",
+        "timestamp": "2025-10-06T02:55:28.5-07:00",
+        "operator": "kafka-consumer-v2.1.0"
+      }
+    ],
+    "processing_pipeline": "kafka-streaming-pipeline-v2.1"
+  },
+  "access_control": {
+    "owner": "calfire-fire-intelligence-team",
+    "steward": "senior-data-scientist",
+    "authorized_users": ["user:analyst@calfire.ca.gov", "user:chief@calfire.ca.gov"],
+    "authorized_groups": ["group:fire-chiefs", "group:analysts", "group:scientists", "group:emergency-responders"],
+    "last_accessed": "2025-10-06T05:42:15-07:00",
+    "access_count": 247
+  },
+  "compliance": {
+    "regulations": ["FISMA", "NIST-800-53", "SOC2"],
+    "retention_legal_hold": false,
+    "pii_present": false,
+    "encryption_required": true,
+    "audit_required": true
+  },
+  "technical_metadata": {
+    "size_bytes": 312,
+    "record_count": 1,
+    "column_count": 17,
+    "database_table": "firms_modis_terra_detections",
+    "partition_key": "timestamp::date",
+    "index_keys": ["timestamp", "latitude", "longitude", "confidence", "fire_radiative_power_mw"]
+  },
+  "business_metadata": {
+    "domain": "fire_detection",
+    "use_case": "real-time-wildfire-monitoring-northern-california",
+    "criticality": "mission_critical",
+    "cost_center": "CC-CALFIRE-OPS-2025",
+    "project_code": "CALFIRE-WIP-CHALLENGE1"
+  },
+  "detection_specifics": {
+    "fire_radiative_power_mw": 3.67,
+    "brightness_kelvin": null,
+    "confidence_level": 0,
+    "scan_angle_degrees": 1.6,
+    "track_degrees": 1.25,
+    "day_night_flag": "D",
+    "satellite_platform": "Aqua",
+    "instrument": "MODIS",
+    "version": "6.1NRT",
+    "provider": "NASA LANCE",
+    "location_description": "Northern California - Nevada Border Region"
+  },
+  "version": {
+    "version_number": "1.0.0",
+    "created_at": "2025-10-06T02:55:28-07:00",
+    "created_by": "data-ingestion-service",
+    "changelog": "Initial ingestion from NASA FIRMS MODIS Aqua NRT feed"
+  },
+  "tags": [
+    "wildfire",
+    "fire-detection",
+    "satellite",
+    "modis",
+    "aqua",
+    "california",
+    "real-time",
+    "nrt",
+    "nasa-firms",
+    "northern-california",
+    "moderate-resolution",
+    "thermal-anomaly",
+    "challenge-1-data"
+  ],
+  "sla_metrics": {
+    "ingestion_latency_seconds": 1.5,
+    "end_to_end_latency_minutes": 56,
+    "validation_passed": true,
+    "meets_p95_latency_sla": true,
+    "data_quality_score": 0.98,
+    "duplicate_detected": false,
+    "anomaly_detected": false
+  }
+}

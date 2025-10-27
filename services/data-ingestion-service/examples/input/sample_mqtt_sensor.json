@@ -1,0 +1,92 @@
+{
+  "sensor_id": "CAL-FIRE-SENSOR-2847",
+  "device_type": "environmental_monitor",
+  "timestamp": "2025-01-04T01:30:00Z",
+  "location": {
+    "latitude": 39.7596,
+    "longitude": -121.6219,
+    "elevation_meters": 533.4,
+    "region": "Paradise_CalFire_Station_47"
+  },
+  "measurements": {
+    "temperature": {
+      "value": 14.4,
+      "unit": "celsius",
+      "quality": "good"
+    },
+    "relative_humidity": {
+      "value": 42.8,
+      "unit": "percent",
+      "quality": "good"
+    },
+    "wind_speed": {
+      "value": 12.0,
+      "unit": "km_per_hour",
+      "quality": "good"
+    },
+    "wind_direction": {
+      "value": 350,
+      "unit": "degrees",
+      "quality": "good"
+    },
+    "air_quality": {
+      "pm25": {
+        "value": 8.5,
+        "unit": "ug_m3",
+        "aqi": 35,
+        "category": "good"
+      },
+      "pm10": {
+        "value": 15.2,
+        "unit": "ug_m3",
+        "aqi": 28,
+        "category": "good"
+      },
+      "co": {
+        "value": 0.3,
+        "unit": "ppm",
+        "quality": "good"
+      }
+    },
+    "soil_moisture": {
+      "value": 18.5,
+      "unit": "percent",
+      "depth_cm": 15,
+      "quality": "good"
+    },
+    "solar_radiation": {
+      "value": 0.0,
+      "unit": "w_m2",
+      "quality": "good"
+    },
+    "battery_voltage": {
+      "value": 12.8,
+      "unit": "volts",
+      "status": "healthy"
+    }
+  },
+  "device_info": {
+    "firmware_version": "2.4.1",
+    "hardware_version": "CAL-FIRE-ENV-v3",
+    "uptime_hours": 1247,
+    "last_calibration": "2024-12-15T10:00:00Z",
+    "transmission_strength": -65,
+    "network": "4G_LTE"
+  },
+  "alerts": {
+    "fire_risk_index": {
+      "value": 3.2,
+      "scale": "0-10",
+      "status": "moderate",
+      "factors": ["low_humidity", "moderate_wind"]
+    },
+    "active_alerts": []
+  },
+  "metadata": {
+    "ingestion_mode": "real_time",
+    "protocol": "MQTT",
+    "qos": 1,
+    "retained": false,
+    "topic": "wildfire/sensors/environmental/CAL-FIRE-SENSOR-2847"
+  }
+}

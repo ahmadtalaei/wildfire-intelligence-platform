@@ -1,0 +1,111 @@
+{
+  "context": {
+    "vocab": "https://api.weather.gov/contexts/wx",
+    "version": "1.0"
+  },
+  "type": "Feature",
+  "geometry": {
+    "type": "Point",
+    "coordinates": [-121.6219, 39.7596]
+  },
+  "properties": {
+    "id": "https://api.weather.gov/stations/KOVE/observations/2025-01-04T01:30:00+00:00",
+    "type": "wx:observation",
+    "elevation": {
+      "value": 533.4,
+      "unitCode": "wmoUnit:m"
+    },
+    "station": "https://api.weather.gov/stations/KOVE",
+    "timestamp": "2025-01-04T01:30:00+00:00",
+    "rawMessage": "KOVE 040130Z 35012G18KT 10SM FEW020 SCT250 14/03 A2985 RMK AO2 SLP104 T01440028",
+    "textDescription": "Partly Cloudy",
+    "icon": "https://api.weather.gov/icons/land/night/sct?size=medium",
+    "presentWeather": [],
+    "temperature": {
+      "value": 14.4,
+      "unitCode": "wmoUnit:degC",
+      "qualityControl": "qc:V"
+    },
+    "dewpoint": {
+      "value": 2.8,
+      "unitCode": "wmoUnit:degC",
+      "qualityControl": "qc:V"
+    },
+    "windDirection": {
+      "value": 350,
+      "unitCode": "wmoUnit:degree_(angle)",
+      "qualityControl": "qc:V"
+    },
+    "windSpeed": {
+      "value": 12,
+      "unitCode": "wmoUnit:km_h-1",
+      "qualityControl": "qc:V"
+    },
+    "windGust": {
+      "value": 18,
+      "unitCode": "wmoUnit:km_h-1",
+      "qualityControl": "qc:V"
+    },
+    "barometricPressure": {
+      "value": 101040,
+      "unitCode": "wmoUnit:Pa",
+      "qualityControl": "qc:V"
+    },
+    "seaLevelPressure": {
+      "value": 101040,
+      "unitCode": "wmoUnit:Pa",
+      "qualityControl": "qc:V"
+    },
+    "visibility": {
+      "value": 16093,
+      "unitCode": "wmoUnit:m",
+      "qualityControl": "qc:C"
+    },
+    "maxTemperatureLast24Hours": {
+      "value": null,
+      "unitCode": "wmoUnit:degC",
+      "qualityControl": "qc:Z"
+    },
+    "minTemperatureLast24Hours": {
+      "value": null,
+      "unitCode": "wmoUnit:degC",
+      "qualityControl": "qc:Z"
+    },
+    "precipitationLast3Hours": {
+      "value": 0,
+      "unitCode": "wmoUnit:mm",
+      "qualityControl": "qc:T"
+    },
+    "relativeHumidity": {
+      "value": 42.8,
+      "unitCode": "wmoUnit:percent",
+      "qualityControl": "qc:C"
+    },
+    "windChill": {
+      "value": 11.2,
+      "unitCode": "wmoUnit:degC",
+      "qualityControl": "qc:V"
+    },
+    "heatIndex": {
+      "value": null,
+      "unitCode": "wmoUnit:degC",
+      "qualityControl": "qc:V"
+    },
+    "cloudLayers": [
+      {
+        "base": {
+          "value": 610,
+          "unitCode": "wmoUnit:m"
+        },
+        "amount": "FEW"
+      },
+      {
+        "base": {
+          "value": 7620,
+          "unitCode": "wmoUnit:m"
+        },
+        "amount": "SCT"
+      }
+    ]
+  }
+}

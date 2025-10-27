@@ -1,0 +1,541 @@
+"""
+Generic Stream Manager for Universal Kafka Integration
+Supports any data source from any connector
+
+`StreamManager` orchestrates **live streaming from connectors** and uses `KafkaDataProducer` to **push data to Kafka** while relying on `StreamingConfig` from `ingestion.py` for configuration. Here's the detailed breakdown:
+
+---
+
+## **1. Core Purpose of `StreamManager`**
+* Acts as a **universal orchestrator** for streaming data from **any connector**.
+* Manages **stream lifecycle**: start, stop, monitor active streams.
+* Bridges connector streams to **Kafka topics** using `KafkaDataProducer`.
+* Uses **metadata and configuration models** (`StreamingConfig`) for standardization.
+* Handles **asynchronous streaming**, polling connectors periodically.
+
+---
+
+## **2. Attributes**
+
+| Attribute        | Purpose                                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `kafka_producer` | Instance of `KafkaDataProducer` used to send data to Kafka.                                                              |
+| `active_streams` | Dict of metadata for active streams. Keys are `stream_id`. Stores connector info, config, status, topic, and timestamps. |
+
+---
+
+## **3. Methods and Functionality**
+
+### **A. `start_streaming(connector, config: StreamingConfig)`**
+
+* Accepts:
+
+  * `connector`: Any connector implementing `start_streaming` and `get_stream_data`.
+  * `config`: `StreamingConfig` object containing `source_id`.
+* Generates a **unique `stream_id`** using `source_id` + timestamp.
+* Starts connector’s native streaming (`connector.start_streaming(config)`).
+* Stores **stream metadata** in `active_streams`, including:
+
+  * Kafka topic (determined by `_determine_kafka_topic(config.source_id)`).
+  * Start time, status, connector instance, config.
+* Launches a background async task `_bridge_to_kafka(stream_meta)` to forward data.
+* Returns `stream_id`.
+
+**Integration with Kafka & Models:**
+
+* Uses `KafkaDataProducer.send_batch_data()` to push connector data.
+* Config is validated using **`StreamingConfig`** from `ingestion.py`.
+
+---
+
+### **B. `_bridge_to_kafka(stream_meta)`**
+
+* Runs asynchronously in the background.
+* Periodically (every 30s) polls connector for data via `connector.get_stream_data(stream_meta['connector_stream_id'])`.
+* If data is available:
+
+  * Calls `kafka_producer.send_batch_data(data_batch, source_id=stream_meta['source_id'])`.
+  * Logs the number of records sent.
+* Monitors stream **status** (`active`, `stopped`, `error`) and terminates on error.
+* Handles exceptions and updates `stream_meta['status']` accordingly.
+
+**Integration:**
+
+* **Connector → StreamManager → KafkaDataProducer → Kafka topic**.
+* Topic is selected automatically based on `source_id` (e.g., `"nasa"` → `"wildfire-nasa-firms"`).
+
+---
+
+### **C. `stop_stream(stream_id)`**
+* Stops a running stream:
+
+  1. Marks the status as `'stopped'`.
+  2. Calls `connector.stop_streaming()` with the connector’s internal stream ID.
+  3. Removes the stream from `active_streams`.
+* Returns `True` if successfully stopped.
+
+---
+
+### **D. `_determine_kafka_topic(source_id)`**
+* Maps `source_id` to Kafka topic based on known conventions:
+
+  * NASA/MODIS/VIIRS → `wildfire-nasa-firms`
+  * Weather/NOAA → `wildfire-weather-data`
+  * IoT/Sensor → `wildfire-sensor-data`
+  * Satellite imagery → `wildfire-satellite-imagery`
+  * Other sources → `wildfire-{source_id}` (normalized)
+* Ensures **automatic topic routing** without hardcoding for each source.
+
+---
+
+### **E. `get_active_streams()`**
+* Returns a summary of all active streams:
+
+  * `source_id`
+  * `status`
+  * `start_time` (ISO format)
+  * `kafka_topic`
+* Useful for monitoring or exposing via an API endpoint.
+
+---
+
+## **4. How It Fits Into the System**
+
+```
+[Connector] --(StreamingConfig)--> [StreamManager] --(async polling)--> [KafkaDataProducer] --> [Kafka Topics]
+```
+
+* **`ingestion.py` models** (`StreamingConfig`) provide standard configuration for each connector.
+* **`KafkaDataProducer`** handles delivery, topic selection, partitioning, enrichment, and retries.
+* `StreamManager` handles **lifecycle, metadata, and bridging**, making connectors Kafka-ready without modifying them.
+
+---
+
+## **5. Key Features**
+* **Connector-agnostic**: Works with any streaming source that implements a standard interface.
+* **Asynchronous, non-blocking**: Supports multiple simultaneous streams.
+* **Automatic topic selection**: Uses `source_id` heuristics.
+* **Metadata management**: Tracks stream status, start time, Kafka topic, connector ID.
+* **Error handling**: Catches connector/Kafka exceptions, marks stream `'error'`.
+* **Monitoring**: `get_active_streams()` provides operational insight.
+
+---
+
+✅ **Summary:**
+`StreamManager` is the **orchestrator** for real-time streaming:
+* Receives **connector streams**.
+* Uses **`StreamingConfig`** for configuration.
+* Periodically polls connector and forwards data via **`KafkaDataProducer`**.
+* Handles **stream lifecycle**, topic mapping, error management, and monitoring.
+
+
+"""
+
+import asyncio
+import uuid
+from datetime import datetime
+from typing import Dict, Any, Optional, List
+import structlog
+
+try:
+    from .kafka_producer import KafkaDataProducer
+    from ..models.ingestion import StreamingConfig
+except ImportError:
+    # Fallback for direct execution
+    from kafka_producer import KafkaDataProducer
+    from models.ingestion import StreamingConfig
+
+logger = structlog.get_logger()
+
+
+class StreamManager:
+    """
+    Universal stream manager that works with any connector
+    Provides Kafka integration for all data sources
+    """
+
+    def __init__(self, kafka_producer: KafkaDataProducer):
+        self.kafka_producer = kafka_producer
+        self.active_streams: Dict[str, Dict[str, Any]] = {}
+
+    async def start_streaming(self, connector, config: StreamingConfig) -> str:
+        """
+        Start streaming for ANY connector with Kafka integration
+        """
+        stream_id = f"{config.source_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+        logger.info("🚀 STARTING UNIVERSAL STREAM",
+                   stream_id=stream_id,
+                   source_id=config.source_id,
+                   connector_type=type(connector).__name__)
+
+        try:
+            # Configure Kafka producer for connector if it has set_kafka_producer method
+            if hasattr(connector, 'set_kafka_producer') and callable(getattr(connector, 'set_kafka_producer')):
+                logger.info("🔧 Configuring Kafka producer for connector",
+                           stream_id=stream_id,
+                           connector_type=type(connector).__name__)
+                connector.set_kafka_producer(self.kafka_producer)
+                logger.info("✅ Kafka producer configured for connector",
+                           stream_id=stream_id,
+                           connector_type=type(connector).__name__)
+
+            # Start connector's native streaming
+            logger.info("📡 Calling connector.start_streaming",
+                       stream_id=stream_id,
+                       connector_type=type(connector).__name__)
+            connector_stream_id = await connector.start_streaming(config)
+            logger.info("✅ Connector streaming started successfully",
+                       stream_id=stream_id,
+                       connector_stream_id=connector_stream_id)
+
+        except Exception as e:
+            logger.error("❌ CONNECTOR START_STREAMING FAILED",
+                        stream_id=stream_id,
+                        connector_type=type(connector).__name__,
+                        error=str(e),
+                        exc_info=True)
+            raise
+
+        # Create stream metadata
+        stream_meta = {
+            'stream_id': stream_id,
+            'connector_stream_id': connector_stream_id,
+            'source_id': config.source_id,
+            'connector': connector,
+            'config': config,
+            'status': 'active',
+            'start_time': datetime.now(),
+            'kafka_topic': self._determine_kafka_topic(config.source_id)
+        }
+
+        self.active_streams[stream_id] = stream_meta
+
+        # Start Kafka bridge task
+        logger.info("🌉 STARTING KAFKA BRIDGE TASK", stream_id=stream_id)
+        bridge_task = asyncio.create_task(self._bridge_to_kafka(stream_meta))
+        logger.info("⚡ KAFKA BRIDGE TASK CREATED", stream_id=stream_id, task_id=id(bridge_task))
+
+        logger.info("🎯 Universal stream started SUCCESSFULLY",
+                   stream_id=stream_id,
+                   source_id=config.source_id,
+                   kafka_topic=stream_meta['kafka_topic'])
+
+        return stream_id
+
+    async def _bridge_to_kafka(self, stream_meta: Dict[str, Any]):
+        """
+        Bridge connector data to Kafka (works with any connector)
+        Uses multiple data fetching strategies for maximum compatibility
+        """
+        stream_id = stream_meta['stream_id']
+        connector = stream_meta['connector']
+        config = stream_meta['config']
+        source_id = stream_meta['source_id']
+
+        # Determine polling interval - respect API parameter first, fallback to hardcoded defaults
+        polling_interval = config.get('polling_interval_seconds')
+        if polling_interval is None:
+            polling_interval = self._get_polling_interval(source_id)
+        else:
+            polling_interval = int(polling_interval)
+
+        logger.info("🌉 KAFKA BRIDGE STARTING",
+                   stream_id=stream_id,
+                   source_id=source_id,
+                   polling_interval=polling_interval,
+                   connector_type=type(connector).__name__)
+
+        try:
+            while stream_meta['status'] == 'active':
+                data_batch = None
+
+                # Strategy 1: Try connector's streaming interface
+                if hasattr(connector, 'get_stream_data'):
+                    try:
+                        data_batch = await connector.get_stream_data(stream_meta['connector_stream_id'])
+                    except Exception as e:
+                        logger.debug("Stream data method failed", error=str(e))
+
+                # Strategy 2: Try connector's batch fetching interface
+                if not data_batch and hasattr(connector, 'fetch_batch_data'):
+                    try:
+                        from ..models.ingestion import BatchConfig
+                        from datetime import date
+
+                        batch_config = BatchConfig(
+                            source_id=source_id,
+                            start_date=date.today(),
+                            end_date=date.today(),
+                            format="json"
+                        )
+                        data_batch = await connector.fetch_batch_data(batch_config)
+                    except Exception as e:
+                        logger.debug("Batch data method failed", error=str(e))
+
+                # Strategy 3: Try generic fetch_data method
+                if not data_batch and hasattr(connector, 'fetch_data'):
+                    try:
+                        data_batch = await connector.fetch_data(config)
+                    except Exception as e:
+                        logger.debug("Generic fetch data method failed", error=str(e))
+
+                # Send data to Kafka if we got any
+                if data_batch and len(data_batch) > 0:
+                    try:
+                        success = await self.kafka_producer.send_batch_data(
+                            data_batch,
+                            source_type=self._extract_source_type(source_id),
+                            source_id=source_id
+                        )
+
+                        if success:
+                            # Update stream metadata
+                            stream_meta['last_data_time'] = datetime.now()
+                            stream_meta['total_records'] = stream_meta.get('total_records', 0) + len(data_batch)
+
+                            logger.info("🔄 Live data bridged to Kafka",
+                                       stream_id=stream_id,
+                                       records=len(data_batch),
+                                       total_records=stream_meta['total_records'],
+                                       source_type=self._extract_source_type(source_id))
+                        else:
+                            logger.error("❌ Failed to send data to Kafka", stream_id=stream_id)
+
+                    except Exception as e:
+                        logger.error("💥 Error sending data to Kafka", stream_id=stream_id, error=str(e))
+                else:
+                    # NO EXTERNAL DATA AVAILABLE - Log and continue polling
+                    logger.debug("No new data available from connector", stream_id=stream_id, source_id=source_id)
+
+                # Wait for next polling cycle
+                await asyncio.sleep(polling_interval)
+
+        except Exception as e:
+            logger.error("Stream bridge error", stream_id=stream_id, error=str(e))
+            stream_meta['status'] = 'error'
+
+    def _get_polling_interval(self, source_id: str) -> int:
+        """Get appropriate polling interval for LIVE STREAMING using exact pattern matching"""
+        source_lower = source_id.lower()
+
+        # IoT: iot_* (high frequency sources)
+        if source_lower.startswith('iot_'):
+            return 30  # 30 seconds for live demonstration
+
+        # NASA FIRMS: firms_*, landsat_nrt (fire detection sources)
+        if source_lower.startswith(('firms_', 'landsat_nrt')):
+            return 30 # TEMP: 30s for testing (normally 120  # 2 minutes for fire detections)
+
+        # NOAA Weather: noaa_* (standard weather data)
+        if source_lower.startswith('noaa_'):
+            if source_lower.startswith('noaa_alerts_'):
+                return 30  # 30 seconds for live alerts
+            elif source_lower.startswith(('noaa_stations_', 'noaa_gridpoints_')):
+                return 30  # 30 seconds for live weather stations
+            else:
+                return 30  # 30 seconds for live streaming
+
+        # Weather: wx_* (weather data)
+        if source_lower.startswith('wx_'):
+            if source_lower.startswith(('wx_era5_', 'wx_station_')):
+                if 'reanalysis' in source_lower or 'land' in source_lower:
+                    return 30  # TEMP: 30s for testing (normally 3600 = 1 hour) for historical reanalysis data
+                elif 'metar' in source_lower:
+                    return 30  # 30 seconds for live METAR
+                else:
+                    return 30  # 30 seconds for live streaming
+            else:
+                return 30  # 30 seconds for live streaming
+
+        # Satellite: sat_*
+        if source_lower.startswith('sat_'):
+            if source_lower.startswith('sat_landsat_'):
+                return 30  # TEMP: 30s for testing (normally 86400  # 24 hours for Landsat)
+            else:
+                return 30  # TEMP: 30s for testing (normally 10800  # 3 hours for other satellites)
+
+        return 30  # TEMP: 30s for testing (normally 60  # Default 1 minute for live streaming)
+
+    def _extract_source_type(self, source_id: str) -> str:
+        """Extract source type from source ID for Kafka topic routing"""
+        source_lower = source_id.lower()
+
+        # NASA FIRMS: firms_*, landsat_nrt
+        if source_lower.startswith(('firms_', 'landsat_nrt')):
+            return 'nasa_firms'
+        # Satellite: sat_*
+        elif source_lower.startswith('sat_'):
+            return 'satellite'
+        # NOAA Weather: noaa_*, Weather: wx_*
+        elif source_lower.startswith(('noaa_', 'wx_')):
+            return 'weather'
+        # IoT: iot_*
+        elif source_lower.startswith('iot_'):
+            return 'sensor'
+        else:
+            return 'data'  # Generic fallback
+
+    async def stop_stream(self, stream_id: str) -> bool:
+        """Stop universal stream"""
+        if stream_id not in self.active_streams:
+            return False
+
+        stream_meta = self.active_streams[stream_id]
+        stream_meta['status'] = 'stopped'
+
+        # Stop connector stream
+        connector = stream_meta['connector']
+        await connector.stop_streaming(stream_meta['connector_stream_id'])
+
+        # Remove from active streams
+        del self.active_streams[stream_id]
+
+        logger.info("Universal stream stopped", stream_id=stream_id)
+        return True
+
+    def _determine_kafka_topic(self, source_id: str) -> str:
+        """
+        Determine Kafka topic based on source type
+        Works for ANY source ID using exact pattern matching
+        """
+        source_lower = source_id.lower()
+
+        # NASA FIRMS: firms_*, landsat_nrt
+        if source_lower.startswith(('firms_', 'landsat_nrt')):
+            return 'wildfire-nasa-firms'
+        # Satellite: sat_*
+        elif source_lower.startswith('sat_'):
+            return 'wildfire-satellite-data'
+        # NOAA Weather: noaa_*, Weather: wx_*
+        elif source_lower.startswith(('noaa_', 'wx_')):
+            return 'wildfire-weather-data'
+        # IoT: iot_*
+        elif source_lower.startswith('iot_'):
+            return 'wildfire-iot-sensors'
+        else:
+            return f'wildfire-{source_id.replace("_", "-")}'
+
+    def get_active_streams(self) -> Dict[str, Any]:
+        """Get all active streams"""
+        return {
+            stream_id: {
+                'source_id': meta['source_id'],
+                'status': meta['status'],
+                'start_time': meta['start_time'].isoformat(),
+                'kafka_topic': meta['kafka_topic'],
+                'total_records': meta.get('total_records', 0),
+                'last_data_time': meta.get('last_data_time', {}).isoformat() if meta.get('last_data_time') else None
+            }
+            for stream_id, meta in self.active_streams.items()
+        }
+
+    async def start_all_available_streams(self, connectors: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Discover and start streams from all provided connectors
+        Args:
+            connectors: Dict of {connector_type: connector_instance}
+        Returns:
+            Dict with stream startup results
+        """
+        results = {
+            'started_streams': [],
+            'failed_streams': [],
+            'total_sources': 0,
+            'successful_streams': 0
+        }
+
+        logger.info("Starting universal streaming from all connectors",
+                   connector_count=len(connectors))
+
+        for connector_type, connector in connectors.items():
+            try:
+                # Get all data sources from this connector
+                if hasattr(connector, 'get_sources'):
+                    sources = await connector.get_sources()
+                    results['total_sources'] += len(sources)
+
+                    logger.info("Processing connector sources",
+                               connector_type=connector_type,
+                               source_count=len(sources))
+
+                    for source in sources:
+                        try:
+                            # Create streaming config
+                            config = StreamingConfig(
+                                source_id=source.id,
+                                stream_type="real_time",
+                                buffer_size=500,
+                                batch_interval_seconds=60,
+                                polling_interval_seconds=self._get_polling_interval(source.id),
+                                max_retries=3,
+                                retry_delay_seconds=30
+                            )
+
+                            # Start the stream
+                            stream_id = await self.start_streaming(connector, config)
+
+                            results['started_streams'].append({
+                                'stream_id': stream_id,
+                                'source_id': source.id,
+                                'source_name': source.name,
+                                'connector_type': connector_type,
+                                'provider': getattr(source, 'provider', 'Unknown'),
+                                'polling_interval': self._get_polling_interval(source.id)
+                            })
+
+                            results['successful_streams'] += 1
+
+                            logger.info("Stream started successfully",
+                                       stream_id=stream_id,
+                                       source_name=source.name,
+                                       connector_type=connector_type)
+
+                        except Exception as e:
+                            error_info = {
+                                'source_id': source.id,
+                                'source_name': source.name,
+                                'connector_type': connector_type,
+                                'error': str(e)
+                            }
+                            results['failed_streams'].append(error_info)
+
+                            logger.error("Failed to start individual stream",
+                                        source_id=source.id,
+                                        connector_type=connector_type,
+                                        error=str(e))
+
+                else:
+                    logger.warning("Connector does not support get_sources method",
+                                  connector_type=connector_type)
+
+            except Exception as e:
+                logger.error("Failed to process connector",
+                           connector_type=connector_type,
+                           error=str(e))
+
+        success_rate = (results['successful_streams'] / results['total_sources'] * 100) if results['total_sources'] > 0 else 0
+
+        logger.info("Universal streaming startup completed",
+                   total_sources=results['total_sources'],
+                   successful_streams=results['successful_streams'],
+                   failed_streams=len(results['failed_streams']),
+                   success_rate=f"{success_rate:.1f}%")
+
+        return results
+
+    async def stop_all_streams(self) -> int:
+        """Stop all active streams"""
+        stopped_count = 0
+        stream_ids = list(self.active_streams.keys())
+
+        for stream_id in stream_ids:
+            try:
+                if await self.stop_stream(stream_id):
+                    stopped_count += 1
+            except Exception as e:
+                logger.error("Error stopping stream", stream_id=stream_id, error=str(e))
+
+        logger.info("Stopped all streams", stopped_count=stopped_count)
+        return stopped_count
+

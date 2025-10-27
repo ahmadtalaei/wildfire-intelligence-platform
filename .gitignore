@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.pytest_cache/
+
+# Node modules
+node_modules/
+npm-debug.log*
+
+# Logs
+*.log
+logs/
+airflow/logs/
+
+# Environment variables
+.env.local
+
+# OS files
+.DS_Store
+Thumbs.db
+nul
+
+# IDE
+.vscode/
+.idea/
+
+# Data files
+data/raw/
+data/processed/
+*.parquet
+*.csv.gz

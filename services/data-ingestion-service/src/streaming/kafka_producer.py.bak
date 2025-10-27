@@ -1,0 +1,661 @@
+"""Kafka producer for wildfire intelligence real-time data streaming"""
+
+import asyncio
+import json
+import logging
+from datetime import datetime, timezone
+from typing import Dict, Any, List, Optional, Callable
+import uuid
+
+try:
+    import aiokafka
+    from aiokafka import AIOKafkaProducer
+    from aiokafka.errors import KafkaError
+except ImportError:
+    aiokafka = None
+    AIOKafkaProducer = None
+    KafkaError = Exception
+
+# Import centralized geographic bounds with configuration fallback
+try:
+    from ..geo_config.geographic_bounds import CALIFORNIA_BOUNDS
+except ImportError:
+    try:
+        from geo_config.geographic_bounds import CALIFORNIA_BOUNDS
+    except ImportError:
+        # Fallback bounds - use hardcoded USGS values if config not available
+        CALIFORNIA_BOUNDS = {
+            'lat_min': 32.534156,   # Southern border (Imperial County)
+            'lat_max': 42.009518,   # Northern border (Modoc County)
+            'lon_min': -124.482003, # Western border (Del Norte County)
+            'lon_max': -114.131211  # Eastern border (Imperial County)
+        }
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+class KafkaDataProducer:
+    """Enhanced Kafka producer for wildfire intelligence platform"""
+
+    def __init__(self, bootstrap_servers: str, client_id: str = None):
+        self.bootstrap_servers = bootstrap_servers
+        self.client_id = client_id or f"wildfire-ingestion-{uuid.uuid4().hex[:8]}"
+        self.producer = None
+        self.is_started = False
+
+        # Get compression type from environment or use snappy as default
+        self.compression_type = self._get_compression_type()
+
+        # Dynamic topic configuration based on data patterns
+        self.default_topic_config = {
+            'partitions': 4,
+            'replication_factor': 3,
+            'config': {'compression.type': self.compression_type}
+        }
+
+        # Topic-specific overrides (only for performance optimization)
+        self.topic_overrides = {
+            'satellite_imagery': {
+                'config': {'compression.type': 'snappy', 'max.message.bytes': '10485760'}  # 10MB for images
+            },
+            'iot_sensors': {
+                'partitions': 8,
+                'config': {'compression.type': 'lz4'}
+            },
+            'weather_data': {
+                'config': {'compression.type': self.compression_type}
+            },
+            'fire_alerts_high': {
+                'partitions': 2,
+                'config': {'retention.ms': '604800000'}  # 7 days
+            },
+            'fire_alerts_medium': {
+                'partitions': 2,
+                'config': {'retention.ms': '259200000'}  # 3 days
+            }
+        }
+
+    def _get_compression_type(self):
+        """Get Kafka compression type with snappy as preferred, fallback to others"""
+        import os
+
+        # Check environment variable first
+        env_compression = os.getenv('KAFKA_COMPRESSION_TYPE', '').lower()
+        if env_compression in ['snappy', 'gzip', 'lz4', 'zstd', 'none']:
+            return env_compression
+
+        # Use gzip for compatibility with consumer
+        logger.info("Using gzip compression for Kafka producer (consumer compatibility)")
+        return 'gzip'
+
+    async def start(self):
+        """Start the Kafka producer"""
+        if not aiokafka:
+            logger.error("aiokafka not available - install with: pip install aiokafka")
+            return False
+            
+        try:
+            self.producer = AIOKafkaProducer(
+                bootstrap_servers=self.bootstrap_servers,
+                client_id=self.client_id,
+                value_serializer=self._serialize_value,
+                key_serializer=self._serialize_key,
+                compression_type=self.compression_type,
+                max_batch_size=32768,  # Increased from 16384 for large batches
+                linger_ms=100,  # Increased from 10ms to allow better batching
+                max_request_size=2097152,  # Increased to 2MB from 1MB
+                retry_backoff_ms=100,
+                request_timeout_ms=120000,  # Increased from 30s to 120s for large ERA5 batches
+                acks='all',  # Wait for all replicas
+                enable_idempotence=True  # Prevent duplicates
+            )
+            
+            await self.producer.start()
+            self.is_started = True
+            logger.info(f"Kafka producer started successfully: {self.client_id}, bootstrap_servers={self.bootstrap_servers}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to start Kafka producer: {e}")
+            return False
+    
+    async def stop(self):
+        """Stop the Kafka producer"""
+        try:
+            if self.producer and self.is_started:
+                await self.producer.stop()
+                self.is_started = False
+                logger.info("Kafka producer stopped")
+        except Exception as e:
+            logger.error(f"Error stopping Kafka producer: {e}")
+    
+    async def health_check(self) -> bool:
+        """Check if Kafka producer is healthy"""
+        if not self.is_started or not self.producer:
+            return False
+
+        try:
+            # Check if producer client is connected
+            return self.producer.client.bootstrap_connected()
+        except Exception as e:
+            logger.debug(f"Kafka health check failed: {e}")
+            # If the producer is started and can send messages, consider it healthy
+            return self.is_started and self.producer is not None
+    
+    async def send_batch_data(self, data: List[Dict[str, Any]], source_type: str = None, source_id: str = None) -> bool:
+        """Send batch data to appropriate Kafka topics using chunked sending for large batches"""
+        if not self.is_started:
+            logger.error("Kafka producer not started")
+            return False
+
+        try:
+            # For large batches, send in chunks to avoid overwhelming Kafka
+            CHUNK_SIZE = 500  # Send 500 records at a time
+            total_records = len(data)
+            total_failed = 0
+
+            for chunk_start in range(0, total_records, CHUNK_SIZE):
+                chunk_end = min(chunk_start + CHUNK_SIZE, total_records)
+                chunk = data[chunk_start:chunk_end]
+
+                send_tasks = []
+                for record in chunk:
+                    topic = self._determine_topic(record, source_type, source_id)
+                    key = self._generate_partition_key(record)
+
+                    # Add metadata
+                    enriched_record = self._enrich_record(record, source_type, source_id)
+
+                    # Send async
+                    send_task = self.producer.send(
+                        topic=topic,
+                        value=enriched_record,
+                        key=key
+                    )
+                    send_tasks.append(send_task)
+
+                # Wait for chunk to complete
+                results = await asyncio.gather(*send_tasks, return_exceptions=True)
+
+                # Check for exceptions in this chunk
+                chunk_failed = 0
+                for i, result in enumerate(results):
+                    if isinstance(result, Exception):
+                        logger.error(f"Failed to send record {chunk_start + i} to Kafka: {result}")
+                        chunk_failed += 1
+
+                total_failed += chunk_failed
+
+                # Flush after each chunk
+                await self.producer.flush()
+
+                if chunk_failed == 0:
+                    logger.info(f"Successfully sent chunk {chunk_start}-{chunk_end-1} ({len(chunk)} records) to Kafka")
+                else:
+                    logger.warning(f"Sent chunk {chunk_start}-{chunk_end-1} with {chunk_failed}/{len(chunk)} failures")
+
+            if total_failed > 0:
+                logger.error(f"Failed to send {total_failed}/{total_records} total records to Kafka")
+                return False
+
+            logger.info(f"Successfully sent all {total_records} records to Kafka")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to send batch data to Kafka: {e}")
+            return False
+    
+    async def send_file_data(self, data: List[Dict[str, Any]], filename: str, file_type: str = None) -> bool:
+        """Send file-based data to Kafka with file metadata"""
+        if not self.is_started:
+            logger.error("Kafka producer not started")
+            return False
+        
+        try:
+            # Determine file type from filename if not provided
+            if not file_type:
+                file_type = self._detect_file_type(filename)
+            
+            send_tasks = []
+            batch_id = str(uuid.uuid4())
+            
+            for i, record in enumerate(data):
+                topic = self._determine_topic_for_file(record, file_type, filename)
+                key = f"{filename}_{i}"
+                
+                # Add file metadata
+                enriched_record = self._enrich_file_record(
+                    record, filename, file_type, batch_id, i, len(data)
+                )
+                
+                send_task = self.producer.send(
+                    topic=topic,
+                    value=enriched_record,
+                    key=key
+                )
+                send_tasks.append(send_task)
+            
+            # Wait for all sends
+            await asyncio.gather(*send_tasks, return_exceptions=True)
+            await self.producer.flush()
+            
+            logger.info(f"Successfully sent file data: {filename} ({len(data)} records)")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to send file data to Kafka: {e}")
+            return False
+    
+    async def send_real_time_data(self, record: Dict[str, Any], source_type: str, source_id: str) -> bool:
+        """Send single real-time record to Kafka"""
+        if not self.is_started:
+            logger.error("Kafka producer not started")
+            return False
+        
+        try:
+            topic = self._determine_topic(record, source_type, source_id)
+            key = self._generate_partition_key(record)
+            enriched_record = self._enrich_record(record, source_type, source_id, real_time=True)
+            
+            await self.producer.send(
+                topic=topic,
+                value=enriched_record,
+                key=key
+            )
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to send real-time data to Kafka: {e}")
+            return False
+    
+    async def send_alert(self, alert_data: Dict[str, Any], severity: str = 'medium') -> bool:
+        """Send wildfire alert to appropriate alert topic"""
+        if not self.is_started:
+            logger.error("Kafka producer not started")
+            return False
+        
+        try:
+            topic = f"wildfire-alerts-{severity.lower()}"
+            key = alert_data.get('alert_id', str(uuid.uuid4()))
+            
+            # Add alert metadata
+            alert_record = {
+                **alert_data,
+                'alert_id': key,
+                'severity': severity,
+                'timestamp': datetime.now(timezone.utc).isoformat(),
+                'producer_id': self.client_id
+            }
+            
+            await self.producer.send(
+                topic=topic,
+                value=alert_record,
+                key=key
+            )
+            
+            logger.info(f"Sent {severity} severity alert: {key}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to send alert to Kafka: {e}")
+            return False
+    
+    def _determine_topic(self, record: Dict[str, Any], source_type: str = None, source_id: str = None) -> str:
+        """Determine the appropriate Kafka topic for the record based on EXACT source_id patterns"""
+        try:
+            # Check record data type first
+            data_type = record.get('data_type', '').lower()
+
+            # Satellite imagery routing (PNG/binary data)
+            if data_type == 'satellite_image' or data_type == 'satellite_imagery':
+                return 'wildfire-satellite-imagery'
+
+            # Route based on EXACT source_id patterns to match connector routing
+            if source_id:
+                source_lower = source_id.lower()
+
+                # NASA FIRMS sources: firms_*, landsat_nrt
+                if source_lower.startswith(('firms_', 'landsat_nrt')):
+                    if data_type == 'satellite_image':
+                        return 'wildfire-satellite-imagery'
+                    else:
+                        return 'wildfire-nasa-firms'
+
+                # Satellite sources: sat_*
+                elif source_lower.startswith('sat_'):
+                    if data_type == 'satellite_image':
+                        return 'wildfire-satellite-imagery'
+                    else:
+                        return 'wildfire-satellite-data'
+
+                # NOAA weather sources: noaa_*
+                elif source_lower.startswith('noaa_'):
+                    return 'wildfire-weather-data'
+
+                # Weather sources: wx_*
+                elif source_lower.startswith('wx_'):
+                    return 'wildfire-weather-data'
+
+                # IoT sources: iot_*
+                elif source_lower.startswith('iot_'):
+                    return 'wildfire-iot-sensors'
+
+            # Fallback to data_type or source_type routing (legacy support)
+            if data_type == 'weather' or source_type == 'weather':
+                return 'wildfire-weather-data'
+            elif data_type == 'iot_sensor' or source_type == 'sensor':
+                return 'wildfire-iot-sensors'
+            elif data_type == 'fire_incident' or source_type == 'nasa_firms':
+                return 'wildfire-incidents'
+
+            # Default topic
+            return 'wildfire-nasa-firms'
+
+        except Exception:
+            return 'wildfire-nasa-firms'  # Safe default
+    
+    def _determine_topic_for_file(self, record: Dict[str, Any], file_type: str, filename: str) -> str:
+        """Determine topic for file-based data using exact pattern matching"""
+        filename_lower = filename.lower()
+
+        # Weather data files (GRIB format, GFS model data)
+        if file_type in ['grib', 'grib2'] or filename_lower.startswith('gfs_'):
+            return 'wildfire-weather-data'
+
+        # Satellite/FIRMS data files
+        elif file_type in ['hdf', 'netcdf']:
+            # NASA FIRMS fire detection files
+            if (filename_lower.startswith(('firms_', 'viirs_', 'modis_')) or
+                'firms' in filename_lower or 'fire' in filename_lower):
+                return 'wildfire-nasa-firms'
+            # General satellite data files
+            elif (filename_lower.startswith(('landsat_', 'sentinel_', 'sat_')) or
+                  'satellite' in filename_lower):
+                return 'wildfire-satellite-data'
+            else:
+                return 'wildfire-satellite-data'  # Default for HDF/NetCDF
+
+        # Use main topic determination logic as fallback
+        else:
+            return self._determine_topic(record)
+    
+    def _generate_partition_key(self, record: Dict[str, Any]) -> str:
+        """Generate partition key for balanced distribution"""
+        try:
+            # Use geographic location for spatial locality
+            lat = record.get('latitude') or record.get('lat')
+            lon = record.get('longitude') or record.get('lon')
+            
+            if lat is not None and lon is not None:
+                # Create geographic grid for partitioning
+                lat_grid = int(float(lat) * 10) % 100  # 0.1 degree resolution
+                lon_grid = int(abs(float(lon)) * 10) % 100
+                return f"geo_{lat_grid}_{lon_grid}"
+            
+            # Use sensor/source ID if available
+            sensor_id = record.get('sensor_id') or record.get('source_id')
+            if sensor_id:
+                return f"sensor_{hash(str(sensor_id)) % 1000}"
+            
+            # Use timestamp-based partitioning as fallback
+            timestamp = record.get('timestamp')
+            if timestamp:
+                if isinstance(timestamp, str):
+                    return f"time_{hash(timestamp) % 1000}"
+                elif hasattr(timestamp, 'hour'):
+                    return f"time_{timestamp.hour}_{timestamp.minute // 10}"
+            
+            # Default random partition
+            return f"default_{uuid.uuid4().hex[:8]}"
+            
+        except Exception:
+            return f"error_{uuid.uuid4().hex[:8]}"
+    
+    def _enrich_record(self, record: Dict[str, Any], source_type: str = None,
+                      source_id: str = None, source_name: str = None, real_time: bool = False) -> Dict[str, Any]:
+        """Add metadata to record for streaming"""
+        enriched = {
+            **record,
+            'ingestion_metadata': {
+                'producer_id': self.client_id,
+                'ingestion_timestamp': datetime.now(timezone.utc).isoformat(),
+                'source_type': source_type,
+                'source_id': source_id,
+                'source_name': source_name or self._get_provider_name(source_id),
+                'real_time': real_time,
+                'processing_stage': 'streaming'
+            }
+        }
+        
+        # Add California wildfire context
+        if self._is_california_relevant(record):
+            enriched['california_relevance'] = True
+            enriched['wildfire_context'] = self._extract_wildfire_context(record)
+        
+        return enriched
+    
+    def _enrich_file_record(self, record: Dict[str, Any], filename: str, file_type: str,
+                           batch_id: str, sequence: int, total_records: int) -> Dict[str, Any]:
+        """Add file-specific metadata to record"""
+        enriched = {
+            **record,
+            'file_metadata': {
+                'filename': filename,
+                'file_type': file_type,
+                'batch_id': batch_id,
+                'sequence': sequence,
+                'total_records': total_records,
+                'processing_timestamp': datetime.now(timezone.utc).isoformat()
+            },
+            'ingestion_metadata': {
+                'producer_id': self.client_id,
+                'ingestion_timestamp': datetime.now(timezone.utc).isoformat(),
+                'processing_stage': 'file_streaming'
+            }
+        }
+        
+        return enriched
+
+    def _get_provider_name(self, source_id: str) -> str:
+        """Map source ID to provider name using exact pattern matching"""
+        if not source_id:
+            return "Unknown"
+
+        source_lower = source_id.lower()
+
+        # NASA FIRMS: firms_*, landsat_nrt
+        if source_lower.startswith(('firms_', 'landsat_nrt')):
+            return "NASA FIRMS"
+        # Satellite: sat_*
+        elif source_lower.startswith('sat_'):
+            return "Satellite Data"
+        # NOAA Weather: noaa_*
+        elif source_lower.startswith('noaa_'):
+            return "NOAA"
+        # Weather: wx_*
+        elif source_lower.startswith('wx_'):
+            return "Weather Services"
+        # IoT: iot_*
+        elif source_lower.startswith('iot_'):
+            return "IoT Network"
+        else:
+            # Fallback to formatted source_id
+            return source_id.replace('_', ' ').title()
+
+    def _is_california_relevant(self, record: Dict[str, Any]) -> bool:
+        """Check if record is relevant to California wildfires"""
+        try:
+            lat = record.get('latitude') or record.get('lat')
+            lon = record.get('longitude') or record.get('lon')
+            
+            if lat is not None and lon is not None:
+                # Use centralized California bounds
+                bounds = CALIFORNIA_BOUNDS
+                return (bounds['lat_min'] <= float(lat) <= bounds['lat_max'] and
+                       bounds['lon_min'] <= float(lon) <= bounds['lon_max'])
+            
+            return True  # Include if no geospatial data
+            
+        except:
+            return True
+    
+    def _extract_wildfire_context(self, record: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract wildfire-relevant context from record"""
+        context = {}
+        
+        # Fire detection indicators
+        if record.get('fire_confidence'):
+            context['fire_detected'] = record['fire_confidence'] > 50
+            context['fire_confidence'] = record['fire_confidence']
+        
+        # Weather risk factors
+        if record.get('fire_weather_index'):
+            context['fire_weather_risk'] = record['fire_weather_index']
+            context['high_fire_risk'] = record['fire_weather_index'] > 70
+        
+        # Air quality/smoke indicators
+        if record.get('pm25'):
+            context['smoke_detected'] = record['pm25'] > 35.0
+            context['air_quality_level'] = 'unhealthy' if record['pm25'] > 55 else 'moderate'
+        
+        # Drought indicators
+        if record.get('soil_moisture'):
+            context['drought_indicator'] = record['soil_moisture'] < 20.0
+        
+        return context
+    
+    def _detect_file_type(self, filename: str) -> str:
+        """Detect file type from filename extension"""
+        suffix = filename.lower().split('.')[-1]
+        type_mapping = {
+            'grib': 'grib', 'grib2': 'grib',
+            'nc': 'netcdf', 'netcdf': 'netcdf',
+            'hdf': 'hdf', 'h5': 'hdf',
+            'tif': 'geotiff', 'tiff': 'geotiff',
+            'json': 'json', 'csv': 'csv'
+        }
+        return type_mapping.get(suffix, 'unknown')
+    
+    def _serialize_value(self, value: Dict[str, Any]) -> bytes:
+        """Serialize record value to JSON bytes"""
+        try:
+            return json.dumps(value, default=str, ensure_ascii=False).encode('utf-8')
+        except Exception as e:
+            logger.error(f"Failed to serialize value: {e}")
+            return json.dumps({'error': 'serialization_failed'}).encode('utf-8')
+    
+    def _serialize_key(self, key: str) -> bytes:
+        """Serialize partition key to bytes"""
+        return str(key).encode('utf-8') if key else None
+    
+    async def get_producer_metrics(self) -> Dict[str, Any]:
+        """Get producer performance metrics"""
+        if not self.producer:
+            return {}
+        
+        try:
+            # Note: aiokafka doesn't expose detailed metrics like kafka-python
+            # This is a simplified implementation
+            return {
+                'is_started': self.is_started,
+                'client_id': self.client_id,
+                'bootstrap_servers': self.bootstrap_servers,
+                'health_status': await self.health_check()
+            }
+        except Exception as e:
+            logger.error(f"Failed to get producer metrics: {e}")
+            return {'error': str(e)}
+    
+    async def create_topics_if_needed(self) -> bool:
+        """Create Kafka topics if they don't exist (requires admin permissions)"""
+        try:
+            # This would require kafka-admin functionality
+            # For now, we'll log the topic configuration
+            logger.info("Topic configuration for wildfire platform:")
+            for topic, config in self.topic_config.items():
+                logger.info(f"  {topic}: {config}")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to create topics: {e}")
+            return False
+
+class StreamingDataManager:
+    """High-level manager for streaming wildfire data"""
+    
+    def __init__(self, kafka_config: Dict[str, Any]):
+        self.kafka_producer = KafkaDataProducer(
+            bootstrap_servers=kafka_config.get('bootstrap_servers', 'localhost:9092'),
+            client_id=kafka_config.get('client_id')
+        )
+        self.is_running = False
+        self.stream_handlers = {}
+    
+    async def start(self) -> bool:
+        """Start the streaming data manager"""
+        success = await self.kafka_producer.start()
+        if success:
+            self.is_running = True
+            logger.info("Streaming data manager started")
+        return success
+    
+    async def stop(self):
+        """Stop the streaming data manager"""
+        await self.kafka_producer.stop()
+        self.is_running = False
+        logger.info("Streaming data manager stopped")
+    
+    async def stream_processed_data(self, processed_data, source_type: str = None) -> bool:
+        """Stream processed data to Kafka"""
+        if not self.is_running:
+            return False
+        
+        try:
+            # Extract data from ProcessedData object
+            if hasattr(processed_data, 'geospatial_data'):
+                data = processed_data.geospatial_data
+                source_type = processed_data.source_type
+                source_id = processed_data.source_id
+            else:
+                data = processed_data
+                source_id = 'unknown'
+            
+            return await self.kafka_producer.send_batch_data(
+                data=data,
+                source_type=source_type,
+                source_id=source_id
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to stream processed data: {e}")
+            return False
+    
+    async def stream_file_data(self, file_data: List[Dict[str, Any]], filename: str) -> bool:
+        """Stream file-based data to Kafka"""
+        if not self.is_running:
+            return False
+        
+        return await self.kafka_producer.send_file_data(file_data, filename)
+    
+    async def send_wildfire_alert(self, alert_data: Dict[str, Any], severity: str = 'medium') -> bool:
+        """Send wildfire alert"""
+        if not self.is_running:
+            return False
+        
+        return await self.kafka_producer.send_alert(alert_data, severity)
+    
+    def register_stream_handler(self, source_type: str, handler: Callable):
+        """Register custom stream handler for specific source types"""
+        self.stream_handlers[source_type] = handler
+        logger.info(f"Registered stream handler for {source_type}")
+    
+    async def health_check(self) -> Dict[str, Any]:
+        """Comprehensive health check"""
+        return {
+            'streaming_manager': self.is_running,
+            'kafka_producer': await self.kafka_producer.health_check(),
+            'registered_handlers': list(self.stream_handlers.keys()),
+            'timestamp': datetime.now(timezone.utc).isoformat()
+        }

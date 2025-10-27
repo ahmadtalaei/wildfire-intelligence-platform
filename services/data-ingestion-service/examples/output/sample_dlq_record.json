@@ -1,0 +1,131 @@
+{
+  "dlq_metadata": {
+    "dlq_id": "dlq_20250104_013245_847",
+    "original_topic": "wildfire-fire-detections",
+    "error_topic": "wildfire-fire-detections-dlq",
+    "timestamp": "2025-01-04T01:32:45.847Z",
+    "retry_count": 3,
+    "max_retries": 3,
+    "status": "FAILED",
+    "next_retry_at": null,
+    "final_disposition": "REQUIRES_MANUAL_REVIEW"
+  },
+  "error_info": {
+    "error_type": "SCHEMA_VALIDATION_ERROR",
+    "error_code": "AVRO_001",
+    "error_message": "Field 'latitude' value 192.5847 exceeds valid range [-90, 90]",
+    "error_details": {
+      "field": "latitude",
+      "invalid_value": 192.5847,
+      "expected_range": "[-90, 90]",
+      "schema_constraint": "latitude must be between -90 and 90 degrees",
+      "validation_rule": "geographic_bounds_check"
+    },
+    "stack_trace": [
+      "File: avro_schema_validator.py, Line: 147, Function: validate_latitude",
+      "File: data_validator.py, Line: 89, Function: validate_geographic_fields",
+      "File: ingestion_pipeline.py, Line: 234, Function: process_message"
+    ],
+    "service": "data-ingestion-service",
+    "service_version": "2.1.0",
+    "connector": "nasa_firms_connector",
+    "connector_version": "1.4.2"
+  },
+  "retry_history": [
+    {
+      "attempt": 1,
+      "timestamp": "2025-01-04T01:32:15.123Z",
+      "error": "SCHEMA_VALIDATION_ERROR",
+      "backoff_seconds": 5,
+      "result": "RETRY_SCHEDULED"
+    },
+    {
+      "attempt": 2,
+      "timestamp": "2025-01-04T01:32:20.456Z",
+      "error": "SCHEMA_VALIDATION_ERROR",
+      "backoff_seconds": 10,
+      "result": "RETRY_SCHEDULED"
+    },
+    {
+      "attempt": 3,
+      "timestamp": "2025-01-04T01:32:30.789Z",
+      "error": "SCHEMA_VALIDATION_ERROR",
+      "backoff_seconds": 20,
+      "result": "MAX_RETRIES_EXCEEDED"
+    }
+  ],
+  "original_message": {
+    "raw_payload": {
+      "latitude": 192.5847,
+      "longitude": -121.6219,
+      "brightness": 328.4,
+      "confidence": "high",
+      "frp": 45.3,
+      "acq_date": "2025-01-04",
+      "acq_time": "0130",
+      "satellite": "NOAA-20",
+      "instrument": "VIIRS",
+      "version": "2.0NRT"
+    },
+    "headers": {
+      "content-type": "application/json",
+      "x-source": "NASA_FIRMS",
+      "x-ingestion-mode": "real_time",
+      "x-correlation-id": "corr_20250104_013215_123"
+    },
+    "kafka_metadata": {
+      "original_partition": 2,
+      "original_offset": 184726,
+      "original_timestamp": "2025-01-04T01:32:15.123Z",
+      "original_key": "FIRMS_20250104_INVALID_001"
+    }
+  },
+  "diagnostic_info": {
+    "likely_cause": "Data source error or transmission corruption",
+    "remediation_steps": [
+      "1. Verify original data source (NASA FIRMS API response)",
+      "2. Check for data transmission errors",
+      "3. Contact data provider if issue persists",
+      "4. Consider manual correction if valid fire detection"
+    ],
+    "impact_assessment": {
+      "severity": "LOW",
+      "data_loss": "SINGLE_RECORD",
+      "operational_impact": "MINIMAL",
+      "fire_detection_missed": false,
+      "reason": "Invalid coordinate suggests corrupt data, not actual fire detection"
+    },
+    "similar_errors_24h": 3,
+    "error_rate_24h": 0.00024,
+    "error_rate_threshold": 0.01,
+    "within_acceptable_limits": true
+  },
+  "alerting": {
+    "alert_sent": true,
+    "alert_channels": ["slack", "pagerduty"],
+    "alert_timestamp": "2025-01-04T01:32:45.950Z",
+    "alert_severity": "WARNING",
+    "oncall_engineer": "ops-team@wildfire.calfire.gov",
+    "ticket_created": true,
+    "ticket_id": "JIRA-OPS-2847",
+    "ticket_url": "https://jira.calfire.gov/browse/OPS-2847"
+  },
+  "compliance_tracking": {
+    "retention_required": true,
+    "retention_period_days": 2555,
+    "retention_reason": "FISMA_7_YEAR_AUDIT_LOG",
+    "pii_present": false,
+    "security_classification": "UNCLASSIFIED",
+    "audit_logged": true,
+    "audit_log_id": "audit_20250104_013245_847"
+  },
+  "resolution": {
+    "resolved": false,
+    "resolution_timestamp": null,
+    "resolution_method": null,
+    "resolved_by": null,
+    "resolution_notes": null,
+    "corrected_data": null,
+    "reprocessed": false
+  }
+}

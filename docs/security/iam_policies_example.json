@@ -1,0 +1,646 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CAL FIRE Wildfire Intelligence Platform - IAM Policy Examples",
+  "description": "Reference IAM policies for AWS, Azure, and GCP demonstrating least-privilege access patterns",
+  "version": "1.0.0",
+  "policies": {
+    "aws_policies": {
+      "fire_analyst_readonly": {
+        "description": "Read-only access to internal fire detection data for analysts",
+        "classification": "Internal",
+        "provider": "AWS IAM",
+        "policy": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "ReadFireDetectionData",
+              "Effect": "Allow",
+              "Action": [
+                "s3:GetObject",
+                "s3:ListBucket"
+              ],
+              "Resource": [
+                "arn:aws:s3:::wildfire-data-lake/internal/firms/*",
+                "arn:aws:s3:::wildfire-data-lake/internal/firesat/*",
+                "arn:aws:s3:::wildfire-data-lake/internal/landsat/*",
+                "arn:aws:s3:::wildfire-data-lake/internal/sentinel3/*"
+              ],
+              "Condition": {
+                "IpAddress": {
+                  "aws:SourceIp": [
+                    "192.0.2.0/24",
+                    "198.51.100.0/24"
+                  ]
+                },
+                "DateGreaterThan": {
+                  "aws:CurrentTime": "2025-01-01T00:00:00Z"
+                },
+                "DateLessThan": {
+                  "aws:CurrentTime": "2025-12-31T23:59:59Z"
+                }
+              }
+            },
+            {
+              "Sid": "ListAllBuckets",
+              "Effect": "Allow",
+              "Action": "s3:ListAllMyBuckets",
+              "Resource": "*"
+            },
+            {
+              "Sid": "DenyUnencryptedObjectUploads",
+              "Effect": "Deny",
+              "Action": "s3:PutObject",
+              "Resource": "arn:aws:s3:::wildfire-data-lake/*",
+              "Condition": {
+                "StringNotEquals": {
+                  "s3:x-amz-server-side-encryption": "aws:kms"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "fire_chief_dashboard": {
+        "description": "Access for Fire Chief dashboard (real-time monitoring)",
+        "classification": "Restricted",
+        "provider": "AWS IAM",
+        "policy": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "ReadRealtimeFireData",
+              "Effect": "Allow",
+              "Action": [
+                "rds:DescribeDBInstances",
+                "rds-data:ExecuteStatement",
+                "rds-data:BatchExecuteStatement"
+              ],
+              "Resource": "arn:aws:rds:us-west-2:123456789012:db:wildfire-postgres",
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestedRegion": "us-west-2"
+                }
+              }
+            },
+            {
+              "Sid": "AccessFireChiefDashboard",
+              "Effect": "Allow",
+              "Action": [
+                "s3:GetObject"
+              ],
+              "Resource": [
+                "arn:aws:s3:::wildfire-data-lake/restricted/firesat_perimeters/*",
+                "arn:aws:s3:::wildfire-data-lake/internal/firms/*"
+              ]
+            },
+            {
+              "Sid": "CloudWatchMetrics",
+              "Effect": "Allow",
+              "Action": [
+                "cloudwatch:GetMetricStatistics",
+                "cloudwatch:ListMetrics"
+              ],
+              "Resource": "*"
+            }
+          ]
+        }
+      },
+      "data_ingestion_service": {
+        "description": "Service account for data ingestion pipeline",
+        "classification": "Internal",
+        "provider": "AWS IAM",
+        "policy": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "WriteToDataLake",
+              "Effect": "Allow",
+              "Action": [
+                "s3:PutObject",
+                "s3:PutObjectAcl"
+              ],
+              "Resource": [
+                "arn:aws:s3:::wildfire-data-lake/internal/*",
+                "arn:aws:s3:::wildfire-data-lake/public/*"
+              ],
+              "Condition": {
+                "StringEquals": {
+                  "s3:x-amz-server-side-encryption": "aws:kms",
+                  "s3:x-amz-server-side-encryption-aws-kms-key-id": "arn:aws:kms:us-west-2:123456789012:key/wildfire-data-key"
+                }
+              }
+            },
+            {
+              "Sid": "KafkaProducerAccess",
+              "Effect": "Allow",
+              "Action": [
+                "kafka:DescribeCluster",
+                "kafka:GetBootstrapBrokers",
+                "kafka-cluster:Connect",
+                "kafka-cluster:DescribeTopic",
+                "kafka-cluster:WriteData"
+              ],
+              "Resource": [
+                "arn:aws:kafka:us-west-2:123456789012:cluster/wildfire-kafka/*",
+                "arn:aws:kafka:us-west-2:123456789012:topic/wildfire-kafka/*/fire-detections",
+                "arn:aws:kafka:us-west-2:123456789012:topic/wildfire-kafka/*/weather-observations"
+              ]
+            },
+            {
+              "Sid": "KMSDecryptEncrypt",
+              "Effect": "Allow",
+              "Action": [
+                "kms:Decrypt",
+                "kms:Encrypt",
+                "kms:GenerateDataKey"
+              ],
+              "Resource": "arn:aws:kms:us-west-2:123456789012:key/wildfire-data-key"
+            },
+            {
+              "Sid": "SecretsManagerAccess",
+              "Effect": "Allow",
+              "Action": [
+                "secretsmanager:GetSecretValue"
+              ],
+              "Resource": [
+                "arn:aws:secretsmanager:us-west-2:123456789012:secret:wildfire/nasa-firms-api-key-*",
+                "arn:aws:secretsmanager:us-west-2:123456789012:secret:wildfire/noaa-api-key-*",
+                "arn:aws:secretsmanager:us-west-2:123456789012:secret:wildfire/postgres-credentials-*"
+              ]
+            }
+          ]
+        }
+      },
+      "data_lifecycle_management": {
+        "description": "Automated data lifecycle transitions (Hot → Warm → Cold → Archive)",
+        "classification": "Internal",
+        "provider": "AWS IAM",
+        "policy": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "S3LifecycleManagement",
+              "Effect": "Allow",
+              "Action": [
+                "s3:GetLifecycleConfiguration",
+                "s3:PutLifecycleConfiguration",
+                "s3:GetBucketTagging",
+                "s3:PutObjectTagging"
+              ],
+              "Resource": [
+                "arn:aws:s3:::wildfire-data-lake",
+                "arn:aws:s3:::wildfire-data-lake/*"
+              ]
+            },
+            {
+              "Sid": "GlacierTransitions",
+              "Effect": "Allow",
+              "Action": [
+                "glacier:InitiateJob",
+                "glacier:GetJobOutput",
+                "glacier:UploadArchive"
+              ],
+              "Resource": "arn:aws:glacier:us-west-2:123456789012:vaults/wildfire-archive"
+            },
+            {
+              "Sid": "CloudWatchEventsForLifecycle",
+              "Effect": "Allow",
+              "Action": [
+                "events:PutRule",
+                "events:PutTargets",
+                "lambda:InvokeFunction"
+              ],
+              "Resource": [
+                "arn:aws:events:us-west-2:123456789012:rule/wildfire-lifecycle-*",
+                "arn:aws:lambda:us-west-2:123456789012:function:wildfire-lifecycle-manager"
+              ]
+            }
+          ]
+        }
+      },
+      "security_audit_readonly": {
+        "description": "Security team read-only access for compliance audits",
+        "classification": "Restricted",
+        "provider": "AWS IAM",
+        "policy": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "ReadAllS3Buckets",
+              "Effect": "Allow",
+              "Action": [
+                "s3:GetObject",
+                "s3:ListBucket",
+                "s3:GetBucketPolicy",
+                "s3:GetBucketAcl",
+                "s3:GetEncryptionConfiguration"
+              ],
+              "Resource": [
+                "arn:aws:s3:::wildfire-*",
+                "arn:aws:s3:::wildfire-*/*"
+              ]
+            },
+            {
+              "Sid": "CloudTrailLogsAccess",
+              "Effect": "Allow",
+              "Action": [
+                "cloudtrail:LookupEvents",
+                "cloudtrail:GetTrail",
+                "cloudtrail:GetTrailStatus"
+              ],
+              "Resource": "*"
+            },
+            {
+              "Sid": "IAMReadOnly",
+              "Effect": "Allow",
+              "Action": [
+                "iam:GetUser",
+                "iam:GetRole",
+                "iam:GetPolicy",
+                "iam:GetPolicyVersion",
+                "iam:ListAttachedUserPolicies",
+                "iam:ListAttachedRolePolicies"
+              ],
+              "Resource": "*"
+            },
+            {
+              "Sid": "KMSKeyInspection",
+              "Effect": "Allow",
+              "Action": [
+                "kms:DescribeKey",
+                "kms:GetKeyPolicy",
+                "kms:GetKeyRotationStatus",
+                "kms:ListKeys"
+              ],
+              "Resource": "*"
+            }
+          ]
+        }
+      }
+    },
+    "azure_policies": {
+      "fire_analyst_readonly_azure": {
+        "description": "Azure RBAC custom role for fire analysts (read-only)",
+        "classification": "Internal",
+        "provider": "Azure RBAC",
+        "policy": {
+          "Name": "Fire Analyst Read-Only",
+          "IsCustom": true,
+          "Description": "Read-only access to wildfire blob storage and SQL databases",
+          "Actions": [
+            "Microsoft.Storage/storageAccounts/blobServices/containers/read",
+            "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read",
+            "Microsoft.Sql/servers/databases/read",
+            "Microsoft.Sql/servers/databases/schemas/tables/read",
+            "Microsoft.Insights/metrics/read"
+          ],
+          "NotActions": [
+            "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/write",
+            "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/delete",
+            "Microsoft.Sql/servers/databases/write"
+          ],
+          "DataActions": [
+            "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read"
+          ],
+          "NotDataActions": [],
+          "AssignableScopes": [
+            "/subscriptions/12345678-1234-1234-1234-123456789012/resourceGroups/wildfire-rg"
+          ]
+        }
+      },
+      "data_ingestion_managed_identity": {
+        "description": "Azure Managed Identity for data ingestion service",
+        "classification": "Internal",
+        "provider": "Azure Managed Identity",
+        "policy": {
+          "Name": "Data Ingestion Service MI",
+          "IsCustom": true,
+          "Description": "Write access to blob storage and Event Hubs for ingestion pipeline",
+          "Actions": [
+            "Microsoft.Storage/storageAccounts/blobServices/containers/read",
+            "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/write",
+            "Microsoft.EventHub/namespaces/eventhubs/write",
+            "Microsoft.KeyVault/vaults/secrets/read"
+          ],
+          "DataActions": [
+            "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/write",
+            "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/add/action",
+            "Microsoft.KeyVault/vaults/secrets/getSecret/action"
+          ],
+          "AssignableScopes": [
+            "/subscriptions/12345678-1234-1234-1234-123456789012/resourceGroups/wildfire-rg"
+          ]
+        }
+      }
+    },
+    "gcp_policies": {
+      "fire_analyst_readonly_gcp": {
+        "description": "GCP IAM custom role for fire analysts",
+        "classification": "Internal",
+        "provider": "GCP IAM",
+        "policy": {
+          "title": "Fire Analyst Read-Only",
+          "description": "Read-only access to Cloud Storage buckets and BigQuery datasets",
+          "stage": "GA",
+          "includedPermissions": [
+            "storage.buckets.get",
+            "storage.buckets.list",
+            "storage.objects.get",
+            "storage.objects.list",
+            "bigquery.datasets.get",
+            "bigquery.tables.get",
+            "bigquery.tables.getData",
+            "monitoring.timeSeries.list"
+          ],
+          "excludedPermissions": [
+            "storage.objects.create",
+            "storage.objects.delete",
+            "bigquery.tables.create",
+            "bigquery.tables.delete"
+          ]
+        }
+      },
+      "data_ingestion_service_account": {
+        "description": "GCP Service Account for data ingestion pipeline",
+        "classification": "Internal",
+        "provider": "GCP Service Account",
+        "policy": {
+          "title": "Data Ingestion Service Account",
+          "description": "Write access to Cloud Storage and Pub/Sub for ingestion",
+          "stage": "GA",
+          "includedPermissions": [
+            "storage.buckets.get",
+            "storage.objects.create",
+            "storage.objects.delete",
+            "pubsub.topics.publish",
+            "pubsub.subscriptions.consume",
+            "secretmanager.versions.access"
+          ],
+          "bindings": [
+            {
+              "role": "roles/storage.objectCreator",
+              "members": [
+                "serviceAccount:data-ingestion@wildfire-project.iam.gserviceaccount.com"
+              ],
+              "condition": {
+                "title": "Only write to internal buckets",
+                "expression": "resource.name.startsWith('projects/_/buckets/wildfire-internal')"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "postgresql_policies": {
+      "fire_analyst_readonly_pg": {
+        "description": "PostgreSQL role for read-only analyst access",
+        "classification": "Internal",
+        "provider": "PostgreSQL RBAC",
+        "policy": {
+          "role_name": "fire_analyst_readonly",
+          "grants": [
+            {
+              "privilege": "CONNECT",
+              "object_type": "DATABASE",
+              "object_name": "wildfire_db"
+            },
+            {
+              "privilege": "USAGE",
+              "object_type": "SCHEMA",
+              "object_name": "public"
+            },
+            {
+              "privilege": "SELECT",
+              "object_type": "TABLE",
+              "object_name": [
+                "firms_modis_terra_detections",
+                "firms_modis_aqua_detections",
+                "firms_viirs_snpp_detections",
+                "firesat_detections",
+                "landsat_nrt_imagery",
+                "sentinel3_slstr_detections",
+                "noaa_gfs_forecast",
+                "metar_observations",
+                "airnow_observations"
+              ]
+            }
+          ],
+          "row_level_security": [
+            {
+              "table": "firesat_perimeters",
+              "policy_name": "analyst_rls_policy",
+              "using": "(classification = 'internal' OR classification = 'public')"
+            }
+          ],
+          "connection_limit": 10,
+          "valid_until": "2025-12-31 23:59:59"
+        }
+      },
+      "fire_chief_restricted_pg": {
+        "description": "PostgreSQL role for Fire Chief dashboard (restricted data access)",
+        "classification": "Restricted",
+        "provider": "PostgreSQL RBAC",
+        "policy": {
+          "role_name": "fire_chief_dashboard",
+          "grants": [
+            {
+              "privilege": "CONNECT",
+              "object_type": "DATABASE",
+              "object_name": "wildfire_db"
+            },
+            {
+              "privilege": "USAGE",
+              "object_type": "SCHEMA",
+              "object_name": "public"
+            },
+            {
+              "privilege": "SELECT",
+              "object_type": "TABLE",
+              "object_name": [
+                "firms_modis_terra_detections",
+                "firms_modis_aqua_detections",
+                "firesat_perimeters",
+                "firesat_thermal",
+                "noaa_alerts_active"
+              ]
+            }
+          ],
+          "row_level_security": [
+            {
+              "table": "firesat_perimeters",
+              "policy_name": "fire_chief_rls_policy",
+              "using": "(classification IN ('internal', 'restricted', 'public'))"
+            },
+            {
+              "table": "noaa_alerts_active",
+              "policy_name": "fire_chief_alerts_rls",
+              "using": "(severity IN ('extreme', 'severe', 'moderate'))"
+            }
+          ],
+          "connection_limit": 5,
+          "ip_whitelist": [
+            "192.0.2.0/24",
+            "198.51.100.0/24"
+          ]
+        }
+      },
+      "data_ingestion_writeonly_pg": {
+        "description": "PostgreSQL role for data ingestion service (write-only)",
+        "classification": "Internal",
+        "provider": "PostgreSQL RBAC",
+        "policy": {
+          "role_name": "data_ingestion_service",
+          "grants": [
+            {
+              "privilege": "CONNECT",
+              "object_type": "DATABASE",
+              "object_name": "wildfire_db"
+            },
+            {
+              "privilege": "USAGE",
+              "object_type": "SCHEMA",
+              "object_name": "public"
+            },
+            {
+              "privilege": "INSERT",
+              "object_type": "TABLE",
+              "object_name": [
+                "firms_modis_terra_detections",
+                "firms_modis_aqua_detections",
+                "firms_viirs_snpp_detections",
+                "firms_viirs_noaa20_detections",
+                "firms_viirs_noaa21_detections",
+                "firesat_detections",
+                "firesat_perimeters",
+                "firesat_thermal",
+                "landsat_nrt_imagery",
+                "sentinel3_slstr_detections",
+                "noaa_gfs_forecast",
+                "noaa_nam_forecast",
+                "noaa_alerts_active",
+                "era5_reanalysis",
+                "metar_observations",
+                "airnow_observations",
+                "purpleair_sensors",
+                "iot_weather_stations",
+                "iot_soil_moisture"
+              ]
+            },
+            {
+              "privilege": "UPDATE",
+              "object_type": "TABLE",
+              "object_name": [
+                "firms_modis_terra_detections",
+                "firms_modis_aqua_detections",
+                "firesat_perimeters"
+              ],
+              "condition": "ONLY for updating 'updated_at' timestamp"
+            }
+          ],
+          "connection_limit": 20,
+          "statement_timeout": "30s"
+        }
+      }
+    },
+    "minio_policies": {
+      "fire_analyst_readonly_minio": {
+        "description": "MinIO policy for read-only analyst access",
+        "classification": "Internal",
+        "provider": "MinIO IAM",
+        "policy": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "s3:GetBucketLocation",
+                "s3:GetObject",
+                "s3:ListBucket"
+              ],
+              "Resource": [
+                "arn:aws:s3:::wildfire-internal/*",
+                "arn:aws:s3:::wildfire-public/*"
+              ]
+            },
+            {
+              "Effect": "Deny",
+              "Action": [
+                "s3:PutObject",
+                "s3:DeleteObject"
+              ],
+              "Resource": "*"
+            }
+          ]
+        }
+      },
+      "data_ingestion_readwrite_minio": {
+        "description": "MinIO policy for data ingestion service (read-write)",
+        "classification": "Internal",
+        "provider": "MinIO IAM",
+        "policy": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "s3:PutObject",
+                "s3:GetObject",
+                "s3:DeleteObject",
+                "s3:ListBucket"
+              ],
+              "Resource": [
+                "arn:aws:s3:::wildfire-internal/*",
+                "arn:aws:s3:::wildfire-backup/*"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  },
+  "policy_templates": {
+    "least_privilege_checklist": [
+      "Deny by default, allow specific actions only",
+      "Use condition statements to restrict by IP, time, or MFA",
+      "Set expiration dates for temporary access (ValidUntil)",
+      "Enable MFA for sensitive operations (MFA required condition)",
+      "Use resource-based policies with specific ARNs (avoid wildcards)",
+      "Implement row-level security (RLS) for database access",
+      "Audit logs for all access (CloudTrail, pgaudit, MinIO audit)"
+    ],
+    "security_best_practices": [
+      "Rotate IAM access keys every 90 days",
+      "Use managed identities/service accounts instead of hardcoded credentials",
+      "Enable encryption at rest (KMS, AES-256) for all storage",
+      "Enforce HTTPS/TLS for data in transit",
+      "Implement network segmentation (VPC, security groups, firewall rules)",
+      "Use secrets manager (AWS Secrets Manager, Azure Key Vault, GCP Secret Manager)",
+      "Enable audit logging and forward to SIEM",
+      "Implement anomaly detection (AWS GuardDuty, Azure Sentinel)",
+      "Regular access reviews (quarterly recertification)",
+      "Principle of least privilege for all users and services"
+    ]
+  },
+  "compliance_mappings": {
+    "FISMA": {
+      "control": "AC-2 Account Management",
+      "requirement": "Create, enable, modify, disable, and remove accounts in accordance with organizational policy",
+      "implementation": "IAM policies with time-bound access, quarterly recertification, automated deprovisioning"
+    },
+    "NIST_800_53": {
+      "control": "AC-3 Access Enforcement",
+      "requirement": "Enforce approved authorizations for logical access",
+      "implementation": "Row-level security (RLS), RBAC policies, IP whitelisting, MFA enforcement"
+    },
+    "SOC2": {
+      "control": "CC6.1 Logical Access Controls",
+      "requirement": "Restrict logical access to authorized users",
+      "implementation": "IAM policies, least privilege, access logs, quarterly reviews"
+    },
+    "CCPA": {
+      "control": "Data Subject Access Requests",
+      "requirement": "Delete consumer data upon request",
+      "implementation": "Data classification (PII detection), manual deletion workflow, audit trail"
+    }
+  }
+}

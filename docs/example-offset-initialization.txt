@@ -1,0 +1,24 @@
+# Example: Initialize offsets before using auto_offset_reset='none'
+
+# 1. Create consumer group with 'latest' first
+docker-compose exec -T postgres psql -U wildfire_user -d wildfire_db << SQL
+UPDATE kafka_consumer_config SET auto_offset_reset = 'latest';
+SQL
+
+# 2. Start service to establish offsets
+docker-compose restart data-storage-service
+sleep 30
+
+# 3. Verify offsets exist for all topics
+docker-compose exec kafka kafka-consumer-groups \
+  --bootstrap-server localhost:9092 \
+  --group data-storage-consumer \
+  --describe
+
+# 4. Now change to 'none' for strict validation
+docker-compose exec -T postgres psql -U wildfire_user -d wildfire_db << SQL
+UPDATE kafka_consumer_config SET auto_offset_reset = 'none';
+SQL
+
+# 5. Restart with 'none' - will now work because offsets exist
+docker-compose restart data-storage-service

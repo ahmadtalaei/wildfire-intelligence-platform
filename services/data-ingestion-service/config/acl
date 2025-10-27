@@ -1,0 +1,11 @@
+# Mosquitto ACL (Access Control List) Configuration
+# Format: user <username>
+#         topic [read|write|readwrite] <topic>
+
+# Wildfire IoT User - Full access to all air quality and weather topics
+user wildfire_iot
+topic readwrite air_quality/#
+topic readwrite weather/#
+topic readwrite wildfire/#
+topic readwrite test/#
+topic readwrite $SYS/#

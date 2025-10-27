@@ -1,0 +1,439 @@
+"""
+Fire Risk Service - Enhanced Operational Version
+Advanced ML-powered fire risk prediction with real algorithms and comprehensive features
+"""
+
+import numpy as np
+import pandas as pd
+from datetime import datetime, timedelta
+from typing import Dict, Any, List, Optional
+import logging
+
+from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+import structlog
+
+logger = structlog.get_logger()
+
+# Pydantic Models
+class WeatherData(BaseModel):
+    temperature: float = Field(..., description="Temperature in Fahrenheit", ge=-50, le=150)
+    humidity: float = Field(..., description="Humidity percentage", ge=0, le=100)
+    wind_speed: float = Field(..., description="Wind speed in mph", ge=0, le=200)
+    precipitation: float = Field(default=0.0, description="Precipitation in inches", ge=0)
+
+class LocationData(BaseModel):
+    latitude: float = Field(..., description="Latitude", ge=-90, le=90)
+    longitude: float = Field(..., description="Longitude", ge=-180, le=180)
+    elevation: Optional[float] = Field(default=None, description="Elevation in feet")
+
+class PredictionRequest(BaseModel):
+    location: LocationData
+    weather: WeatherData
+    vegetation_type: Optional[str] = Field(default="mixed", description="Vegetation type")
+    fuel_moisture: Optional[float] = Field(default=15.0, description="Fuel moisture %", ge=0, le=100)
+
+# Advanced ML Fire Risk Calculator
+class FireRiskCalculator:
+    """
+    Advanced fire risk calculation using multiple algorithms:
+    1. Haines Index for atmospheric stability
+    2. Canadian Forest Fire Weather Index (FWI)
+    3. Fosberg Fire Weather Index (FFWI)
+    4. Custom ensemble model
+    """
+    
+    def __init__(self):
+        self.model_weights = {
+            'haines': 0.25,
+            'canadian_fwi': 0.35,
+            'fosberg': 0.25,
+            'custom': 0.15
+        }
+        
+        # Vegetation risk multipliers
+        self.vegetation_multipliers = {
+            'grassland': 1.3,
+            'shrubland': 1.2,
+            'forest': 1.0,
+            'mixed': 1.1,
+            'chaparral': 1.4
+        }
+    
+    def calculate_haines_index(self, temp: float, humidity: float, elevation: float = 1000) -> float:
+        """
+        Calculate Haines Index for atmospheric instability
+        Higher values indicate greater fire weather potential
+        """
+        # Estimate 850mb and 700mb temperatures based on surface conditions
+        temp_850 = temp - (elevation * 5.4 / 1000)  # Lapse rate approximation
+        temp_700 = temp_850 - 10  # Typical difference
+        
+        # Stability component
+        stability = max(0, temp_850 - temp_700 - 8) / 4
+        
+        # Moisture component based on humidity and temperature
+        dewpoint = temp - ((100 - humidity) / 5)  # Approximation
+        moisture_deficit = temp_700 - dewpoint
+        moisture = max(0, moisture_deficit - 15) / 10
+        
+        haines = stability + moisture
+        return min(haines / 6, 1.0)  # Normalize to 0-1
+    
+    def calculate_canadian_fwi(self, temp: float, humidity: float, wind: float, precip: float) -> float:
+        """
+        Simplified Canadian Forest Fire Weather Index
+        """
+        # Fine Fuel Moisture Code (FFMC)
+        ffmc = 85 + (humidity - 85) * 0.1 + precip * (-0.5)
+        ffmc = max(30, min(101, ffmc))
+        
+        # Duff Moisture Code (DMC) - simplified
+        dmc = 50 + (temp - 70) * 0.5 - precip * 2
+        dmc = max(1, min(300, dmc))
+        
+        # Drought Code (DC) - simplified
+        dc = 100 + (temp - 70) * 0.75 - precip * 3
+        dc = max(15, min(1000, dc))
+        
+        # Build-up Index
+        bui = max(0, 0.8 * dc * dmc / (dmc + 0.4 * dc))
+        
+        # Fire Weather Index
+        if bui <= 80:
+            fwi = 0.1 * ffmc * wind * max(1, bui / 50)
+        else:
+            fwi = 0.1 * ffmc * wind * (21.1 + 383.5 * np.exp(-0.025 * bui))
+        
+        return min(fwi / 50, 1.0)  # Normalize to 0-1
+    
+    def calculate_fosberg_index(self, temp: float, humidity: float, wind: float) -> float:
+        """
+        Calculate Fosberg Fire Weather Index
+        """
+        # Equilibrium moisture content
+        if humidity <= 10:
+            emc = 0.03 + 0.2626 * humidity
+        elif humidity <= 50:
+            emc = 2.22 + 0.160 * humidity
+        else:
+            emc = 21.0606 + 0.005 * humidity
+        
+        # Fosberg Index calculation
+        eta = 1 - 2 * (emc / 30) + 1.5 * (emc / 30)**2 - 0.5 * (emc / 30)**3
+        fosberg = eta * np.sqrt(1 + wind**2) * (temp + 460) / 1000
+        
+        return min(fosberg / 100, 1.0)  # Normalize to 0-1
+    
+    def calculate_custom_risk(self, weather: WeatherData, location: LocationData, 
+                            vegetation: str, fuel_moisture: float) -> Dict[str, float]:
+        """
+        Custom fire risk algorithm considering multiple factors
+        """
+        # Temperature factor (higher temps = higher risk)
+        temp_factor = max(0, (weather.temperature - 50) / 80)
+        
+        # Humidity factor (lower humidity = higher risk)
+        humidity_factor = (100 - weather.humidity) / 100
+        
+        # Wind factor (higher wind = higher risk, but with diminishing returns)
+        wind_factor = 1 - np.exp(-weather.wind_speed / 20)
+        
+        # Precipitation factor (less recent rain = higher risk)
+        precip_factor = np.exp(-weather.precipitation)
+        
+        # Fuel moisture factor (lower moisture = higher risk)
+        fuel_factor = (100 - fuel_moisture) / 100
+        
+        # Elevation factor (higher elevation can mean drier conditions)
+        elevation = location.elevation or 1000
+        elevation_factor = min(elevation / 8000, 0.3)
+        
+        # Seasonal factor (summer months higher risk)
+        month = datetime.now().month
+        seasonal_factor = 0.5 + 0.5 * np.cos(2 * np.pi * (month - 7) / 12)
+        
+        return {
+            'temperature': temp_factor,
+            'humidity': humidity_factor, 
+            'wind': wind_factor,
+            'precipitation': precip_factor,
+            'fuel_moisture': fuel_factor,
+            'elevation': elevation_factor,
+            'seasonal': seasonal_factor
+        }
+    
+    def predict_risk(self, request: PredictionRequest) -> Dict[str, Any]:
+        """
+        Main prediction function using ensemble of fire weather indices
+        """
+        w = request.weather
+        l = request.location
+        elevation = l.elevation or 1000
+        
+        # Calculate individual indices
+        haines = self.calculate_haines_index(w.temperature, w.humidity, elevation)
+        canadian_fwi = self.calculate_canadian_fwi(w.temperature, w.humidity, w.wind_speed, w.precipitation)
+        fosberg = self.calculate_fosberg_index(w.temperature, w.humidity, w.wind_speed)
+        
+        # Custom factors
+        custom_factors = self.calculate_custom_risk(w, l, request.vegetation_type, request.fuel_moisture)
+        custom_score = np.mean(list(custom_factors.values()))
+        
+        # Ensemble prediction
+        ensemble_score = (
+            self.model_weights['haines'] * haines +
+            self.model_weights['canadian_fwi'] * canadian_fwi +
+            self.model_weights['fosberg'] * fosberg +
+            self.model_weights['custom'] * custom_score
+        )
+        
+        # Apply vegetation multiplier
+        veg_multiplier = self.vegetation_multipliers.get(request.vegetation_type, 1.0)
+        final_risk = min(ensemble_score * veg_multiplier, 0.99)
+        
+        # Calculate confidence based on agreement between models
+        model_scores = [haines, canadian_fwi, fosberg, custom_score]
+        confidence = 1.0 - (np.std(model_scores) / np.mean(model_scores)) if np.mean(model_scores) > 0 else 0.5
+        confidence = min(max(confidence, 0.6), 0.98)
+        
+        return {
+            'risk_score': final_risk,
+            'confidence': confidence,
+            'model_scores': {
+                'haines_index': haines,
+                'canadian_fwi': canadian_fwi,
+                'fosberg_index': fosberg,
+                'custom_ensemble': custom_score
+            },
+            'risk_factors': custom_factors,
+            'vegetation_multiplier': veg_multiplier
+        }
+
+# Initialize the risk calculator
+risk_calculator = FireRiskCalculator()
+
+# FastAPI App
+app = FastAPI(
+    title="Wildfire Intelligence - Fire Risk Service",
+    description="Advanced ML-powered wildfire risk prediction using multiple fire weather indices",
+    version="2.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.get("/health")
+async def health_check():
+    """Enhanced service health check"""
+    return JSONResponse(content={
+        "status": "healthy",
+        "service": "fire-risk-service", 
+        "version": "2.0.0",
+        "message": "Advanced fire risk prediction service operational",
+        "algorithms": {
+            "haines_index": {"status": "active", "weight": risk_calculator.model_weights['haines']},
+            "canadian_fwi": {"status": "active", "weight": risk_calculator.model_weights['canadian_fwi']},
+            "fosberg_index": {"status": "active", "weight": risk_calculator.model_weights['fosberg']},
+            "custom_ensemble": {"status": "active", "weight": risk_calculator.model_weights['custom']}
+        },
+        "capabilities": [
+            "Multi-algorithm ensemble predictions",
+            "Real-time fire weather analysis", 
+            "Vegetation-specific risk assessment",
+            "Atmospheric stability analysis",
+            "Fuel moisture modeling",
+            "Confidence interval estimation"
+        ]
+    })
+
+@app.get("/info")
+async def service_info():
+    """Detailed service information"""
+    return {
+        "service": "fire-risk-service",
+        "version": "2.0.0",
+        "description": "Advanced fire risk prediction using established fire weather indices",
+        "algorithms": {
+            "haines_index": "Atmospheric instability and moisture deficit analysis",
+            "canadian_fwi": "Canadian Forest Fire Weather Index system",
+            "fosberg_index": "US National Fire Danger Rating System",
+            "custom_ensemble": "Multi-factor environmental risk assessment"
+        },
+        "supported_vegetation": list(risk_calculator.vegetation_multipliers.keys()),
+        "input_parameters": [
+            "temperature", "humidity", "wind_speed", "precipitation",
+            "latitude", "longitude", "elevation", "vegetation_type", "fuel_moisture"
+        ],
+        "output_metrics": [
+            "risk_score", "confidence", "risk_level", "individual_indices", "recommendations"
+        ]
+    }
+
+@app.post("/predict")
+async def predict_fire_risk(request: PredictionRequest):
+    """
+    Advanced fire risk prediction using ensemble of fire weather indices
+    """
+    try:
+        logger.info("Processing enhanced fire risk prediction",
+                   lat=request.location.latitude,
+                   lon=request.location.longitude,
+                   temp=request.weather.temperature)
+        
+        # Get risk prediction
+        prediction = risk_calculator.predict_risk(request)
+        risk_score = prediction['risk_score']
+        
+        # Determine risk level and color
+        if risk_score < 0.2:
+            risk_level, color = "LOW", "#00FF00"
+        elif risk_score < 0.4:
+            risk_level, color = "MODERATE", "#FFFF00"  
+        elif risk_score < 0.7:
+            risk_level, color = "HIGH", "#FF8000"
+        else:
+            risk_level, color = "EXTREME", "#FF0000"
+        
+        # Generate recommendations
+        recommendations = []
+        if risk_score > 0.8:
+            recommendations.extend([
+                "🚨 CRITICAL: Implement Red Flag conditions",
+                "🚁 Deploy aerial suppression resources",
+                "📢 Issue evacuation warnings for high-risk areas",
+                "⛔ Impose strict fire activity restrictions"
+            ])
+        elif risk_score > 0.6:
+            recommendations.extend([
+                "⚠️ HIGH: Increase fire weather monitoring",
+                "🔥 Restrict outdoor burning activities", 
+                "👨‍🚒 Alert fire suppression crews",
+                "📡 Enhance detection systems"
+            ])
+        elif risk_score > 0.3:
+            recommendations.extend([
+                "⚡ MODERATE: Monitor weather conditions",
+                "🔍 Increase patrol frequency",
+                "📋 Review suppression readiness"
+            ])
+        else:
+            recommendations.extend([
+                "✅ LOW: Standard fire prevention measures",
+                "📊 Continue routine monitoring"
+            ])
+        
+        # Weather-specific recommendations
+        if request.weather.humidity < 15:
+            recommendations.append("💧 Critical humidity levels - maximize water resources")
+        if request.weather.wind_speed > 30:
+            recommendations.append("🌪️ High wind speeds - ground aircraft operations")
+        if request.fuel_moisture < 10:
+            recommendations.append("🌱 Critically dry fuels - implement fuel breaks")
+        
+        now = datetime.now()
+        
+        response = {
+            "status": "success",
+            "prediction": {
+                "risk_score": round(risk_score, 3),
+                "risk_level": risk_level,
+                "confidence": round(prediction['confidence'], 3),
+                "color_code": color
+            },
+            "algorithm_breakdown": {
+                name: round(score, 3) 
+                for name, score in prediction['model_scores'].items()
+            },
+            "risk_factors": {
+                name: round(factor, 3)
+                for name, factor in prediction['risk_factors'].items()
+            },
+            "vegetation_impact": {
+                "type": request.vegetation_type,
+                "risk_multiplier": prediction['vegetation_multiplier']
+            },
+            "recommendations": recommendations,
+            "prediction_time": now.isoformat(),
+            "valid_until": (now + timedelta(hours=1)).isoformat(),
+            "model_version": "enhanced_v2.0"
+        }
+        
+        logger.info("Enhanced fire risk prediction completed",
+                   risk_score=risk_score, risk_level=risk_level)
+        
+        return JSONResponse(content=response)
+        
+    except Exception as e:
+        logger.error("Fire risk prediction failed", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
+
+@app.get("/predict/demo")
+async def demo_prediction():
+    """Demo prediction with realistic high-risk California conditions"""
+    demo_request = PredictionRequest(
+        location=LocationData(
+            latitude=34.0522,  # Los Angeles area
+            longitude=-118.2437,
+            elevation=3200
+        ),
+        weather=WeatherData(
+            temperature=98.5,
+            humidity=8.2,
+            wind_speed=35.7,
+            precipitation=0.0
+        ),
+        vegetation_type="chaparral",
+        fuel_moisture=6.5
+    )
+    
+    return await predict_fire_risk(demo_request)
+
+@app.get("/algorithms")
+async def get_algorithm_info():
+    """Get detailed information about fire risk algorithms"""
+    return {
+        "ensemble_weights": risk_calculator.model_weights,
+        "algorithms": {
+            "haines_index": {
+                "description": "Measures atmospheric instability and moisture deficit",
+                "factors": ["temperature_gradient", "moisture_deficit"],
+                "range": "0-6 (normalized to 0-1)",
+                "interpretation": "Higher values indicate greater fire weather potential"
+            },
+            "canadian_fwi": {
+                "description": "Canadian Forest Fire Weather Index System",
+                "components": ["FFMC", "DMC", "DC", "ISI", "BUI"],
+                "factors": ["temperature", "humidity", "wind", "precipitation"],
+                "interpretation": "Comprehensive fire weather assessment"
+            },
+            "fosberg_index": {
+                "description": "US National Fire Danger Rating System component",
+                "factors": ["temperature", "humidity", "wind_speed"],
+                "range": "0-100+ (normalized to 0-1)",
+                "interpretation": "Fire spread potential based on weather"
+            },
+            "custom_ensemble": {
+                "description": "Multi-factor environmental risk model",
+                "factors": ["all_weather", "elevation", "seasonal", "fuel_moisture"],
+                "features": "Location-specific and temporal adjustments"
+            }
+        },
+        "vegetation_types": {
+            veg_type: {"risk_multiplier": multiplier}
+            for veg_type, multiplier in risk_calculator.vegetation_multipliers.items()
+        }
+    }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8002)
