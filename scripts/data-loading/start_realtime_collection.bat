@@ -1,0 +1,34 @@
+@echo off
+echo ============================================================================
+echo   WILDFIRE INTELLIGENCE PLATFORM - REAL-TIME DATA COLLECTION
+echo ============================================================================
+echo.
+echo Starting comprehensive real-time data collection from:
+echo   [SATELLITE]  NASA FIRMS Satellite Data (5 sources, 5-min intervals)
+echo   [SUN_CLOUD]  NOAA Weather Stations (10 locations, 10-min intervals)  
+echo   🚨 CAL FIRE Incident Database (JSON + CSV APIs, 5-min intervals)
+echo   🔌 IoT Sensor Networks (4 networks, 2-min intervals)
+echo.
+echo ============================================================================
+echo.
+echo Make sure your platform is running first:
+echo   docker-compose -f docker-compose-simple.yml up -d
+echo.
+echo Platform endpoints:
+echo   API Documentation: http://localhost:8001/docs
+echo   Platform Stats: http://localhost:8001/api/v1/stats
+echo.
+echo Press Ctrl+C to stop all collectors gracefully
+echo.
+echo ============================================================================
+echo.
+
+cd /d "%~dp0"
+python run_all_realtime_collectors.py
+
+echo.
+echo ============================================================================
+echo Real-time data collection stopped.
+echo Platform is still running at: http://localhost:8001/docs
+echo ============================================================================
+pause

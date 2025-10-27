@@ -1,0 +1,761 @@
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import {
+  Box,
+  Typography,
+  Card,
+  Switch,
+  FormControlLabel,
+  IconButton,
+  Collapse,
+  Alert,
+  CircularProgress,
+  Chip,
+  Badge
+} from '@mui/material';
+import {
+  ExpandMore,
+  ExpandLess,
+  LocalFireDepartment,
+  Flight,
+  WaterDrop,
+  LocalHospital,
+  Radio,
+  Home,
+  Route,
+  Landscape,
+  Science,
+  LocalPolice,
+  Thermostat
+} from '@mui/icons-material';
+
+interface LiveFireDataMapProps {
+  liveFireData: Array<{
+    id: string;
+    latitude: number;
+    longitude: number;
+    brightness: number;
+    confidence: number;
+    frp: number;
+    satellite: 'MODIS' | 'VIIRS' | 'AVHRR';
+    acquisitionTime: string;
+    daynight: 'D' | 'N';
+    type: number;
+    acq_date: string;
+    acq_time: string;
+  }>;
+  loading: boolean;
+  error: string | null;
+}
+
+interface OperationalOverlay {
+  id: string;
+  type: 'helicopter_landing' | 'water_source' | 'emergency_service' | 'communication_tower' |
+        'wildland_urban_interface' | 'evacuation_route' | 'fuel_analysis' | 'weather_station' |
+        'fire_hazard_zone';
+  name: string;
+  latitude: number;
+  longitude: number;
+  status: 'operational' | 'threatened' | 'offline';
+  priority: 'low' | 'medium' | 'high' | 'critical';
+  capacity?: number;
+  details?: string;
+}
+
+declare global {
+  interface Window {
+    L: any;
+  }
+}
+
+const LiveFireDataMap: React.FC<LiveFireDataMapProps> = ({
+  liveFireData,
+  loading,
+  error
+}) => {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const leafletMapRef = useRef<any>(null);
+  const [mapLoaded, setMapLoaded] = useState(false);
+  const [showControls, setShowControls] = useState(false);
+  const [fireMarkersLayer, setFireMarkersLayer] = useState<any>(null);
+  const [operationalLayer, setOperationalLayer] = useState<any>(null);
+
+  const [selectedOverlays, setSelectedOverlays] = useState({
+    activeFires: true,
+    helicopterLanding: true,
+    waterSources: true,
+    emergencyServices: true,
+    communicationTowers: false,
+    wildlandUrbanInterface: true,
+    evacuationRoutes: true,
+    fuelAnalysis: false,
+    weatherStations: true,
+    fireHazardZones: true
+  });
+
+  // Mock operational data (in production, this would come from real APIs)
+  const operationalData: OperationalOverlay[] = [
+    // Helicopter Landing Zones
+    {
+      id: 'heli-1',
+      type: 'helicopter_landing',
+      name: 'LAX Emergency Helipad',
+      latitude: 33.9425,
+      longitude: -118.4081,
+      status: 'operational',
+      priority: 'critical',
+      capacity: 4
+    },
+    {
+      id: 'heli-2',
+      type: 'helicopter_landing',
+      name: 'Griffith Observatory Helispot',
+      latitude: 34.1184,
+      longitude: -118.3004,
+      status: 'operational',
+      priority: 'high',
+      capacity: 2
+    },
+    {
+      id: 'heli-3',
+      type: 'helicopter_landing',
+      name: 'Mount Wilson Helipad',
+      latitude: 34.2256,
+      longitude: -118.0606,
+      status: 'threatened',
+      priority: 'high',
+      capacity: 3
+    },
+
+    // Water Sources
+    {
+      id: 'water-1',
+      type: 'water_source',
+      name: 'Hansen Dam Recreation Area',
+      latitude: 34.2584,
+      longitude: -118.4108,
+      status: 'operational',
+      priority: 'critical',
+      capacity: 50000,
+      details: 'Primary water source for aerial firefighting'
+    },
+    {
+      id: 'water-2',
+      type: 'water_source',
+      name: 'Castaic Lake',
+      latitude: 34.4889,
+      longitude: -118.6226,
+      status: 'operational',
+      priority: 'high',
+      capacity: 325000
+    },
+    {
+      id: 'water-3',
+      type: 'water_source',
+      name: 'Lake Balboa',
+      latitude: 34.2014,
+      longitude: -118.5018,
+      status: 'operational',
+      priority: 'medium',
+      capacity: 15000
+    },
+
+    // Emergency Services
+    {
+      id: 'emergency-1',
+      type: 'emergency_service',
+      name: 'UCLA Medical Center',
+      latitude: 34.0522,
+      longitude: -118.4448,
+      status: 'operational',
+      priority: 'critical'
+    },
+    {
+      id: 'emergency-2',
+      type: 'emergency_service',
+      name: 'LA County Fire Station 73',
+      latitude: 34.2695,
+      longitude: -118.4523,
+      status: 'operational',
+      priority: 'critical'
+    },
+    {
+      id: 'emergency-3',
+      type: 'emergency_service',
+      name: 'Burbank Police Department',
+      latitude: 34.1808,
+      longitude: -118.3258,
+      status: 'operational',
+      priority: 'high'
+    },
+
+    // Communication Towers
+    {
+      id: 'comm-1',
+      type: 'communication_tower',
+      name: 'Mount Wilson Communications',
+      latitude: 34.2256,
+      longitude: -118.0606,
+      status: 'operational',
+      priority: 'critical'
+    },
+    {
+      id: 'comm-2',
+      type: 'communication_tower',
+      name: 'Verdugo Peak Repeater',
+      latitude: 34.2089,
+      longitude: -118.2567,
+      status: 'operational',
+      priority: 'high'
+    },
+
+    // Weather Stations
+    {
+      id: 'weather-1',
+      type: 'weather_station',
+      name: 'Angeles Crest RAWS',
+      latitude: 34.3567,
+      longitude: -118.1234,
+      status: 'operational',
+      priority: 'high'
+    },
+    {
+      id: 'weather-2',
+      type: 'weather_station',
+      name: 'Sylmar RAWS Station',
+      latitude: 34.3089,
+      longitude: -118.4398,
+      status: 'operational',
+      priority: 'high'
+    }
+  ];
+
+  // Load Leaflet
+  useEffect(() => {
+    const loadLeaflet = async () => {
+      if (!document.querySelector('link[href*="leaflet.css"]')) {
+        const cssLink = document.createElement('link');
+        cssLink.rel = 'stylesheet';
+        cssLink.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+        cssLink.integrity = 'sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=';
+        cssLink.crossOrigin = '';
+        document.head.appendChild(cssLink);
+      }
+
+      if (!window.L) {
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+        script.integrity = 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=';
+        script.crossOrigin = '';
+        script.onload = () => setMapLoaded(true);
+        document.head.appendChild(script);
+      } else {
+        setMapLoaded(true);
+      }
+    };
+
+    loadLeaflet();
+  }, []);
+
+  // Initialize map
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current || leafletMapRef.current) return;
+
+    try {
+      const map = window.L.map(mapRef.current, {
+        center: [36.7783, -119.4179], // California center
+        zoom: 6,
+        zoomControl: true,
+        attributionControl: true
+      });
+
+      // Add base layers
+      const baseLayers = {
+        'Satellite': window.L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+          maxZoom: 19,
+          attribution: 'Tiles © Esri'
+        }),
+        'Streets': window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19,
+          attribution: '© OpenStreetMap contributors'
+        }),
+        'Terrain': window.L.tileLayer('https://stamen-tiles-{s}.a.ssl.fastly.net/terrain/{z}/{x}/{y}{r}.png', {
+          maxZoom: 18,
+          attribution: 'Map tiles by Stamen Design',
+          subdomains: 'abcd'
+        })
+      };
+
+      baseLayers['Satellite'].addTo(map);
+      window.L.control.layers(baseLayers).addTo(map);
+
+      leafletMapRef.current = map;
+
+      console.log('🗺️ Live Fire Data Map initialized');
+    } catch (err) {
+      console.error('Map initialization error:', err);
+    }
+  }, [mapLoaded]);
+
+  // Add live fire markers
+  const addLiveFireMarkers = useCallback((map: any, fireData: any[]) => {
+    if (!window.L || !fireData.length) return;
+
+    console.log(`🔥 Adding ${fireData.length} live fire markers to map`);
+
+    // Remove existing fire markers
+    if (fireMarkersLayer) {
+      map.removeLayer(fireMarkersLayer);
+    }
+
+    const markersGroup = window.L.layerGroup();
+
+    fireData.forEach((fire) => {
+      const intensity = fire.frp > 100 ? 'Extreme' :
+                      fire.frp > 50 ? 'High' :
+                      fire.frp > 20 ? 'Moderate' : 'Low';
+
+      const fireIcon = window.L.divIcon({
+        className: 'live-fire-marker',
+        html: `
+          <div style="
+            width: ${Math.max(16, Math.min(40, fire.frp / 3))}px;
+            height: ${Math.max(16, Math.min(40, fire.frp / 3))}px;
+            background: radial-gradient(circle, #FF4500 0%, #FF0000 70%, #8B0000 100%);
+            border-radius: 50%;
+            border: 2px solid white;
+            box-shadow: 0 0 ${fire.frp / 5}px rgba(255, 69, 0, 0.8);
+            animation: liveFirePulse 2s ease-in-out infinite;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: ${Math.max(8, Math.min(14, fire.frp / 8))}px;
+            font-weight: bold;
+          ">
+            🔥
+          </div>
+        `,
+        iconSize: [Math.max(16, Math.min(40, fire.frp / 3)), Math.max(16, Math.min(40, fire.frp / 3))],
+        iconAnchor: [Math.max(8, Math.min(20, fire.frp / 6)), Math.max(8, Math.min(20, fire.frp / 6))]
+      });
+
+      const marker = window.L.marker([fire.latitude, fire.longitude], { icon: fireIcon })
+        .bindPopup(`
+          <div style="min-width: 300px; font-family: Arial, sans-serif;">
+            <h3 style="margin: 0 0 10px 0; color: #FF4500; display: flex; align-items: center;">
+              🛰️ LIVE SATELLITE FIRE DETECTION
+            </h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; font-size: 14px;">
+              <div><strong>Satellite:</strong><br>${fire.satellite}</div>
+              <div><strong>Confidence:</strong><br>${fire.confidence}%</div>
+              <div><strong>Fire Power:</strong><br>${fire.frp.toFixed(1)} MW</div>
+              <div><strong>Brightness:</strong><br>${fire.brightness.toFixed(1)}K</div>
+              <div><strong>Day/Night:</strong><br>${fire.daynight === 'D' ? 'Day' : 'Night'}</div>
+              <div><strong>Intensity:</strong><br>${intensity}</div>
+            </div>
+            <div style="margin-bottom: 10px;">
+              <strong>Location:</strong><br>
+              ${fire.latitude.toFixed(4)}°N, ${Math.abs(fire.longitude).toFixed(4)}°W
+            </div>
+            <div style="margin-bottom: 10px;">
+              <strong>Detection Time:</strong><br>
+              ${new Date(fire.acquisitionTime).toLocaleString()}
+            </div>
+            <div style="background: rgba(255, 69, 0, 0.1); padding: 10px; border-radius: 6px; border-left: 4px solid #FF4500;">
+              <strong style="color: #FF4500;">⚠️ LIVE SATELLITE DATA</strong><br>
+              <small>Real-time fire detection from NASA FIRMS ${fire.satellite} satellite.</small>
+            </div>
+          </div>
+        `);
+
+      markersGroup.addLayer(marker);
+    });
+
+    markersGroup.addTo(map);
+    setFireMarkersLayer(markersGroup);
+
+    // Add animation CSS
+    if (!document.querySelector('#live-fire-animation')) {
+      const style = document.createElement('style');
+      style.id = 'live-fire-animation';
+      style.textContent = `
+        @keyframes liveFirePulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.7; transform: scale(1.2); }
+        }
+        .live-fire-marker {
+          background: none !important;
+          border: none !important;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    // Auto-fit bounds to show all fires (focus on California)
+    if (fireData.length > 0) {
+      const californiaFires = fireData.filter(fire =>
+        fire.latitude >= 32.5 && fire.latitude <= 42.0 &&
+        fire.longitude >= -124.5 && fire.longitude <= -114.0
+      );
+
+      if (californiaFires.length > 0) {
+        const bounds = window.L.latLngBounds(californiaFires.map(fire => [fire.latitude, fire.longitude]));
+        map.fitBounds(bounds, { padding: [20, 20] });
+      }
+    }
+
+  }, [fireMarkersLayer]);
+
+  // Add operational overlays
+  const addOperationalOverlays = useCallback((map: any) => {
+    if (!window.L) return;
+
+    console.log('🚁 Adding operational overlays to map');
+
+    // Remove existing operational layer
+    if (operationalLayer) {
+      map.removeLayer(operationalLayer);
+    }
+
+    const overlaysGroup = window.L.layerGroup();
+
+    operationalData.forEach((overlay) => {
+      if (!selectedOverlays[overlay.type as keyof typeof selectedOverlays]) return;
+
+      let iconHtml = '';
+      let color = '#2196F3';
+
+      switch (overlay.type) {
+        case 'helicopter_landing':
+          iconHtml = '🚁';
+          color = overlay.status === 'threatened' ? '#FF9800' : '#4CAF50';
+          break;
+        case 'water_source':
+          iconHtml = '💧';
+          color = '#2196F3';
+          break;
+        case 'emergency_service':
+          iconHtml = overlay.name.includes('Fire') ? '🚒' :
+                    overlay.name.includes('Police') ? '🚔' : '🚑';
+          color = '#F44336';
+          break;
+        case 'communication_tower':
+          iconHtml = '📡';
+          color = '#9C27B0';
+          break;
+        case 'weather_station':
+          iconHtml = '🌡️';
+          color = '#FF9800';
+          break;
+        default:
+          iconHtml = '📍';
+      }
+
+      const overlayIcon = window.L.divIcon({
+        className: 'operational-overlay-marker',
+        html: `
+          <div style="
+            width: 32px;
+            height: 32px;
+            background: ${color};
+            border-radius: 50%;
+            border: 2px solid white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            ${overlay.status === 'threatened' ? 'animation: threatPulse 1.5s ease-in-out infinite;' : ''}
+          ">
+            ${iconHtml}
+          </div>
+        `,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16]
+      });
+
+      const marker = window.L.marker([overlay.latitude, overlay.longitude], { icon: overlayIcon })
+        .bindPopup(`
+          <div style="min-width: 250px; font-family: Arial, sans-serif;">
+            <h3 style="margin: 0 0 10px 0; color: ${color}; display: flex; align-items: center;">
+              ${iconHtml} ${overlay.name}
+            </h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px;">
+              <div><strong>Type:</strong><br>${overlay.type.replace('_', ' ')}</div>
+              <div><strong>Priority:</strong><br>${overlay.priority.toUpperCase()}</div>
+              <div><strong>Status:</strong><br>
+                <span style="color: ${overlay.status === 'operational' ? '#4CAF50' :
+                                    overlay.status === 'threatened' ? '#FF9800' : '#F44336'};">
+                  ${overlay.status.toUpperCase()}
+                </span>
+              </div>
+              ${overlay.capacity ? `<div><strong>Capacity:</strong><br>${overlay.capacity.toLocaleString()}</div>` : ''}
+            </div>
+            ${overlay.details ? `<div style="margin-bottom: 10px;"><strong>Details:</strong><br>${overlay.details}</div>` : ''}
+            <div style="background: ${overlay.status === 'threatened' ? 'rgba(255, 152, 0, 0.1)' : 'rgba(76, 175, 80, 0.1)'};
+                        padding: 10px; border-radius: 6px; border-left: 4px solid ${overlay.status === 'threatened' ? '#FF9800' : '#4CAF50'};">
+              <strong style="color: ${overlay.status === 'threatened' ? '#FF9800' : '#4CAF50'};">
+                ${overlay.status === 'threatened' ? '⚠️ Asset at Risk' : '✅ Operational Status'}
+              </strong><br>
+              <small>${overlay.status === 'threatened' ? 'Monitor for potential wildfire impact.' : 'Available for emergency operations.'}</small>
+            </div>
+          </div>
+        `);
+
+      overlaysGroup.addLayer(marker);
+    });
+
+    overlaysGroup.addTo(map);
+    setOperationalLayer(overlaysGroup);
+
+    // Add threat animation CSS
+    if (!document.querySelector('#threat-animation')) {
+      const style = document.createElement('style');
+      style.id = 'threat-animation';
+      style.textContent = `
+        @keyframes threatPulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.6; transform: scale(1.1); }
+        }
+        .operational-overlay-marker {
+          background: none !important;
+          border: none !important;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+  }, [operationalLayer, selectedOverlays]);
+
+  // Update fire markers when data changes
+  useEffect(() => {
+    if (leafletMapRef.current && liveFireData.length > 0) {
+      addLiveFireMarkers(leafletMapRef.current, liveFireData);
+    }
+  }, [liveFireData, addLiveFireMarkers]);
+
+  // Update operational overlays when selections change
+  useEffect(() => {
+    if (leafletMapRef.current) {
+      addOperationalOverlays(leafletMapRef.current);
+    }
+  }, [selectedOverlays, addOperationalOverlays]);
+
+  const handleOverlayToggle = (overlayName: keyof typeof selectedOverlays) => {
+    setSelectedOverlays(prev => ({
+      ...prev,
+      [overlayName]: !prev[overlayName]
+    }));
+  };
+
+  if (!mapLoaded) {
+    return (
+      <Box sx={{
+        height: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#f5f5f5'
+      }}>
+        <Box sx={{ textAlign: 'center' }}>
+          <CircularProgress size={60} sx={{ mb: 2, color: '#d32f2f' }} />
+          <Typography variant="h6">Loading Live Fire Intelligence Map...</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Initializing Leaflet & operational overlays
+          </Typography>
+        </Box>
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ position: 'relative', width: '100%', height: '100%' }}>
+      {/* Map Container */}
+      <Box
+        ref={mapRef}
+        sx={{
+          width: '100%',
+          height: '100%',
+          '& .leaflet-container': {
+            height: '100%',
+            width: '100%'
+          }
+        }}
+      />
+
+      {/* Controls Toggle */}
+      <Box sx={{
+        position: 'absolute',
+        top: 16,
+        left: 16,
+        zIndex: 1001
+      }}>
+        <IconButton
+          onClick={() => setShowControls(!showControls)}
+          sx={{
+            background: 'rgba(211, 47, 47, 0.9)',
+            color: 'white',
+            '&:hover': { background: 'rgba(211, 47, 47, 1)' }
+          }}
+        >
+          {showControls ? <ExpandLess /> : <ExpandMore />}
+        </IconButton>
+      </Box>
+
+      {/* Operational Controls Panel */}
+      <Collapse in={showControls}>
+        <Card sx={{
+          position: 'absolute',
+          top: 70,
+          left: 16,
+          padding: 2,
+          background: 'rgba(211, 47, 47, 0.95)',
+          backdropFilter: 'blur(10px)',
+          zIndex: 1000,
+          maxWidth: 300,
+          color: 'white'
+        }}>
+          <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 'bold' }}>
+            🔥 Fire & Operational Data
+          </Typography>
+
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={selectedOverlays.activeFires}
+                  onChange={() => handleOverlayToggle('activeFires')}
+                  sx={{ '& .MuiSwitch-thumb': { backgroundColor: 'white' } }}
+                />
+              }
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <LocalFireDepartment sx={{ fontSize: 16 }} />
+                  <Typography variant="body2">Active Fires ({liveFireData.length})</Typography>
+                </Box>
+              }
+            />
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={selectedOverlays.helicopterLanding}
+                  onChange={() => handleOverlayToggle('helicopterLanding')}
+                  sx={{ '& .MuiSwitch-thumb': { backgroundColor: 'white' } }}
+                />
+              }
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Flight sx={{ fontSize: 16 }} />
+                  <Typography variant="body2">Helicopter Landing Zones</Typography>
+                </Box>
+              }
+            />
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={selectedOverlays.waterSources}
+                  onChange={() => handleOverlayToggle('waterSources')}
+                  sx={{ '& .MuiSwitch-thumb': { backgroundColor: 'white' } }}
+                />
+              }
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <WaterDrop sx={{ fontSize: 16 }} />
+                  <Typography variant="body2">Water Sources</Typography>
+                </Box>
+              }
+            />
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={selectedOverlays.emergencyServices}
+                  onChange={() => handleOverlayToggle('emergencyServices')}
+                  sx={{ '& .MuiSwitch-thumb': { backgroundColor: 'white' } }}
+                />
+              }
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <LocalHospital sx={{ fontSize: 16 }} />
+                  <Typography variant="body2">Emergency Services</Typography>
+                </Box>
+              }
+            />
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={selectedOverlays.communicationTowers}
+                  onChange={() => handleOverlayToggle('communicationTowers')}
+                  sx={{ '& .MuiSwitch-thumb': { backgroundColor: 'white' } }}
+                />
+              }
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Radio sx={{ fontSize: 16 }} />
+                  <Typography variant="body2">Communication Towers</Typography>
+                </Box>
+              }
+            />
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={selectedOverlays.weatherStations}
+                  onChange={() => handleOverlayToggle('weatherStations')}
+                  sx={{ '& .MuiSwitch-thumb': { backgroundColor: 'white' } }}
+                />
+              }
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Thermostat sx={{ fontSize: 16 }} />
+                  <Typography variant="body2">Weather Stations</Typography>
+                </Box>
+              }
+            />
+          </Box>
+
+          {/* Data Source Status */}
+          <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid rgba(255,255,255,0.3)' }}>
+            <Typography variant="caption" sx={{ display: 'block', fontWeight: 'bold', mb: 1 }}>
+              🛰️ DATA SOURCES ACTIVE
+            </Typography>
+            <Typography variant="caption" sx={{ display: 'block' }}>
+              NASA FIRMS: {liveFireData.length} fires
+            </Typography>
+            <Typography variant="caption" sx={{ display: 'block' }}>
+              Coverage: Nationwide + California Focus
+            </Typography>
+            <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+              🚁 {operationalData.filter(o => o.type === 'helicopter_landing').length} Helicopter Zones
+            </Typography>
+            <Typography variant="caption" sx={{ display: 'block' }}>
+              💧 {operationalData.filter(o => o.type === 'water_source').length} Water Sources
+            </Typography>
+          </Box>
+        </Card>
+      </Collapse>
+
+      {/* Error Alert */}
+      {error && (
+        <Alert
+          severity="warning"
+          sx={{
+            position: 'absolute',
+            top: 16,
+            right: 16,
+            zIndex: 1000,
+            maxWidth: 300
+          }}
+        >
+          <Typography variant="body2">{error}</Typography>
+        </Alert>
+      )}
+    </Box>
+  );
+};
+
+export default LiveFireDataMap;

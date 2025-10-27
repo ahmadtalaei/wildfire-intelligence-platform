@@ -1,0 +1,446 @@
+{
+  "id": null,
+  "uid": "challenge3-analytics",
+  "title": "Challenge 3: Analytics Platform & User Interfaces",
+  "tags": ["challenge3", "analytics", "user-interfaces", "self-service", "data-clearing-house", "competition"],
+  "style": "dark",
+  "timezone": "browser",
+  "refresh": "60s",
+  "schemaVersion": 27,
+  "version": 2,
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "templating": {
+    "list": [
+      {
+        "name": "user_role",
+        "type": "query",
+        "label": "User Role",
+        "datasource": {"type": "postgres", "uid": "PostgreSQL-Wildfire"},
+        "query": "SELECT user_role as __value, CASE WHEN user_role = 'admin' THEN 'Admin' WHEN user_role = 'fire_chief' THEN 'Fire Chief' WHEN user_role = 'data_scientist' THEN 'Data Scientist' WHEN user_role = 'data_analyst' THEN 'Data Analyst' WHEN user_role = 'field_responder' THEN 'Field Responder' END as __text FROM (SELECT 'admin' as user_role UNION SELECT 'fire_chief' UNION SELECT 'data_scientist' UNION SELECT 'data_analyst' UNION SELECT 'field_responder') t ORDER BY CASE user_role WHEN 'admin' THEN 1 WHEN 'fire_chief' THEN 2 WHEN 'data_scientist' THEN 3 WHEN 'data_analyst' THEN 4 WHEN 'field_responder' THEN 5 END",
+        "refresh": 1,
+        "regex": "",
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "skipUrlSync": false,
+        "sort": 0
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "name": "Analytics Usage",
+        "datasource": "PostgreSQL-Wildfire",
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(0, 96, 255, 1)",
+        "query": "SELECT executed_at as time, CONCAT('High Analytics Usage: ', COUNT(*), ' queries') as text, 'analytics' as tags FROM analytics_queries WHERE executed_at >= NOW() - INTERVAL '6 hours' GROUP BY DATE_TRUNC('hour', executed_at) HAVING COUNT(*) > 10 ORDER BY 1"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "title": "🔬 CHALLENGE 3: ANALYTICS PLATFORM MONITORING",
+      "type": "text",
+      "gridPos": {"h": 3, "w": 24, "x": 0, "y": 0},
+      "id": 100,
+      "options": {
+        "content": "**Real-Time Platform Usage & Performance Metrics** - Live streaming analytics showing user activity, query performance, session tracking, and data consumption by role",
+        "mode": "markdown"
+      }
+    },
+    {
+      "title": "👥 USER ROLE-SPECIFIC METRICS",
+      "type": "text",
+      "gridPos": {"h": 2, "w": 24, "x": 0, "y": 3},
+      "id": 101,
+      "options": {
+        "content": "**Current Role: ${user_role}** - Switch roles in dashboard variables to see role-specific analytics",
+        "mode": "markdown"
+      }
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 100},
+              {"color": "green", "value": 500}
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {"h": 4, "w": 8, "x": 0, "y": 5},
+      "id": 1,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        }
+      },
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(*) as \"Analytics Queries\" FROM analytics_queries WHERE user_role = '${user_role}' AND executed_at >= $__timeFrom() AND executed_at <= $__timeTo()",
+          "refId": "A"
+        }
+      ],
+      "title": "Analytics Queries",
+      "type": "stat"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 1000},
+              {"color": "green", "value": 500}
+            ]
+          },
+          "unit": "ms"
+        }
+      },
+      "gridPos": {"h": 4, "w": 8, "x": 8, "y": 5},
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        }
+      },
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(AVG(response_time_ms)::INTEGER, 0) as \"Avg Query Response (ms)\" FROM analytics_queries WHERE user_role = '${user_role}' AND executed_at >= $__timeFrom() AND executed_at <= $__timeTo()",
+          "refId": "A"
+        }
+      ],
+      "title": "Avg Query Response",
+      "type": "stat"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 10},
+              {"color": "green", "value": 25}
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {"h": 4, "w": 8, "x": 16, "y": 5},
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        }
+      },
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(*) as \"Active User Sessions\" FROM user_sessions WHERE user_role = '${user_role}' AND is_active = TRUE AND last_activity >= $__timeFrom() AND last_activity <= $__timeTo()",
+          "refId": "A"
+        }
+      ],
+      "title": "Active User Sessions",
+      "type": "stat"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 20},
+              {"color": "green", "value": 50}
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {"h": 4, "w": 8, "x": 0, "y": 9},
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        }
+      },
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(*) as \"Reports Generated\" FROM reports_generated WHERE user_role = '${user_role}' AND generated_at >= $__timeFrom() AND generated_at <= $__timeTo()",
+          "refId": "A"
+        }
+      ],
+      "title": "Reports Generated",
+      "type": "stat"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 10},
+              {"color": "green", "value": 30}
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {"h": 4, "w": 8, "x": 8, "y": 9},
+      "id": 5,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        }
+      },
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(*) as \"Data Exports\" FROM data_exports WHERE user_role = '${user_role}' AND export_status = 'completed' AND exported_at >= $__timeFrom() AND exported_at <= $__timeTo()",
+          "refId": "A"
+        }
+      ],
+      "title": "Data Exports",
+      "type": "stat"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 60},
+              {"color": "green", "value": 80}
+            ]
+          },
+          "unit": "percent"
+        }
+      },
+      "gridPos": {"h": 4, "w": 8, "x": 16, "y": 9},
+      "id": 6,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        }
+      },
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT CASE WHEN total_sessions > 0 THEN (active_sessions::FLOAT / total_sessions * 100)::INTEGER ELSE 0 END as \"Platform Usage %\" FROM (SELECT COUNT(*) FILTER (WHERE is_active = TRUE) as active_sessions, COUNT(*) as total_sessions FROM user_sessions WHERE user_role = '${user_role}' AND session_start >= $__timeFrom()) sub",
+          "refId": "A"
+        }
+      ],
+      "title": "Platform Usage",
+      "type": "stat"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "gradientMode": "none",
+            "hideFrom": {"legend": false, "tooltip": false, "vis": false},
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {"type": "linear"},
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {"group": "A", "mode": "none"},
+            "thresholdsStyle": {"mode": "off"}
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "red", "value": 80}
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 13},
+      "id": 7,
+      "options": {
+        "legend": {"calcs": [], "displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "single"}
+      },
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(executed_at, $__interval), query_type as metric, COUNT(*) as value FROM analytics_queries WHERE user_role = '${user_role}' AND $__timeFilter(executed_at) GROUP BY 1, 2 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "📊 Role-Based Analytics Activity",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "hideFrom": {"legend": false, "tooltip": false, "vis": false}
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 13},
+      "id": 8,
+      "options": {
+        "pieType": "pie",
+        "tooltip": {"mode": "single"},
+        "legend": {"displayMode": "table", "placement": "right", "values": ["value", "percent"]},
+        "displayLabels": ["percent"],
+        "reduceOptions": {
+          "values": true,
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT CASE WHEN query_type = 'rest_api' THEN 'REST API' WHEN query_type = 'graphql' THEN 'GraphQL' WHEN query_type = 'sql' THEN 'SQL' ELSE query_type END as metric, COUNT(*)::float as value FROM analytics_queries WHERE user_role = '${user_role}' AND executed_at >= $__timeFrom() AND executed_at <= $__timeTo() GROUP BY query_type ORDER BY value DESC",
+          "refId": "A"
+        }
+      ],
+      "title": "🔬 Analytics Platform Distribution",
+      "type": "piechart"
+    },
+    {
+      "title": "🚨 REAL-TIME QUERY ACTIVITY LOG",
+      "type": "text",
+      "gridPos": {"h": 2, "w": 24, "x": 0, "y": 21},
+      "id": 102,
+      "options": {
+        "content": "**Live Query Monitoring** - Real-time view of user queries, datasets accessed, records processed, query performance, and execution status",
+        "mode": "markdown"
+      }
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto"
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "red", "value": 80}
+            ]
+          }
+        }
+      },
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 23},
+      "id": 9,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT q.query_type as \"User Activity\", q.data_source as \"Dataset Accessed\", q.rows_returned as \"Records Processed\", q.response_time_ms as \"Query Time (ms)\", q.query_status as \"Status\", q.executed_at as \"Session Time\" FROM analytics_queries q WHERE q.user_role = '${user_role}' AND q.executed_at >= $__timeFrom() AND q.executed_at <= $__timeTo() ORDER BY q.executed_at DESC LIMIT 20",
+          "refId": "A"
+        }
+      ],
+      "title": "🚨 Real-Time Analytics Platform Usage & Session Monitoring",
+      "type": "table"
+    }
+  ]
+}

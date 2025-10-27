@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: service-config
+  namespace: wildfire-platform
+data:
+  api-base-url: "http://api.wildfire-platform.svc.cluster.local"
+  noaa-user-agent: "WildfireIntelligence/1.0 (calfire@example.com)"
+  log-level: "INFO"
+  cache-ttl: "300"
+  max-workers: "4"

@@ -1,0 +1,336 @@
+import React from 'react';
+import {
+  Paper,
+  Typography,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  Chip,
+  Box,
+  IconButton,
+  Tooltip,
+  Badge,
+  Avatar,
+  Divider,
+} from '@mui/material';
+import {
+  Warning,
+  LocalFireDepartment,
+  Cloud,
+  People,
+  DirectionsRun,
+  Settings,
+  Visibility,
+  CheckCircle,
+  Circle,
+} from '@mui/icons-material';
+
+interface Alert {
+  id: string;
+  type: 'fire_risk' | 'weather' | 'resource' | 'evacuation' | 'system';
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  title: string;
+  message: string;
+  timestamp: string;
+  isRead: boolean;
+  location?: string;
+}
+
+interface RecentAlertsProps {
+  alerts?: Alert[];
+  loading?: boolean;
+  onViewDetails?: (alert: Alert) => void;
+  onMarkAsRead?: (alertId: string) => void;
+}
+
+const RecentAlerts: React.FC<RecentAlertsProps> = ({
+  alerts = [],
+  loading = false,
+  onViewDetails,
+  onMarkAsRead,
+}) => {
+  // Mock data if no alerts provided
+  const mockAlerts: Alert[] = [
+    {
+      id: '1',
+      type: 'fire_risk',
+      severity: 'high',
+      title: 'High Fire Risk Alert',
+      message: 'Elevated fire risk conditions detected in Riverside County due to high winds and dry conditions.',
+      timestamp: '2 minutes ago',
+      isRead: false,
+      location: 'Riverside County',
+    },
+    {
+      id: '2',
+      type: 'weather',
+      severity: 'medium',
+      title: 'Red Flag Warning',
+      message: 'Red flag warning issued for San Bernardino Mountains. Wind gusts up to 40 mph expected.',
+      timestamp: '15 minutes ago',
+      isRead: false,
+      location: 'San Bernardino Mountains',
+    },
+    {
+      id: '3',
+      type: 'resource',
+      severity: 'low',
+      title: 'Resource Status Update',
+      message: 'Engine 15 has returned to station and is now available for deployment.',
+      timestamp: '1 hour ago',
+      isRead: true,
+      location: 'Station 15',
+    },
+    {
+      id: '4',
+      type: 'evacuation',
+      severity: 'critical',
+      title: 'Evacuation Advisory',
+      message: 'Evacuation advisory issued for residents near Riverside Fire perimeter.',
+      timestamp: '2 hours ago',
+      isRead: false,
+      location: 'Riverside County',
+    },
+    {
+      id: '5',
+      type: 'system',
+      severity: 'medium',
+      title: 'System Maintenance',
+      message: 'Scheduled maintenance window for communication systems starting at 2:00 AM.',
+      timestamp: '3 hours ago',
+      isRead: true,
+    },
+  ];
+
+  const displayAlerts = alerts.length > 0 ? alerts : mockAlerts;
+  const unreadCount = displayAlerts.filter(alert => !alert.isRead).length;
+
+  const getAlertIcon = (type: string) => {
+    switch (type) {
+      case 'fire_risk':
+        return <LocalFireDepartment />;
+      case 'weather':
+        return <Cloud />;
+      case 'resource':
+        return <People />;
+      case 'evacuation':
+        return <DirectionsRun />;
+      case 'system':
+        return <Settings />;
+      default:
+        return <Warning />;
+    }
+  };
+
+  const getSeverityColor = (severity: string) => {
+    switch (severity) {
+      case 'critical':
+        return 'error';
+      case 'high':
+        return 'warning';
+      case 'medium':
+        return 'info';
+      case 'low':
+        return 'success';
+      default:
+        return 'default';
+    }
+  };
+
+  if (loading) {
+    return (
+      <Paper sx={{ p: 2 }}>
+        <Typography variant="h6" gutterBottom>
+          Recent Alerts
+        </Typography>
+        <Box display="flex" justifyContent="center" py={4}>
+          <Typography color="text.secondary">Loading alerts...</Typography>
+        </Box>
+      </Paper>
+    );
+  }
+
+  return (
+    <Paper sx={{ p: 2 }}>
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+        <Typography variant="h6">
+          Recent Alerts
+        </Typography>
+        <Badge badgeContent={unreadCount} color="error">
+          <Chip
+            label={`${displayAlerts.length} Total`}
+            size="small"
+            variant="outlined"
+          />
+        </Badge>
+      </Box>
+
+      {displayAlerts.length === 0 ? (
+        <Box textAlign="center" py={4}>
+          <CheckCircle sx={{ fontSize: 48, color: 'success.main', mb: 1 }} />
+          <Typography color="text.secondary">
+            No recent alerts
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            All systems are operating normally
+          </Typography>
+        </Box>
+      ) : (
+        <List dense sx={{ maxHeight: 400, overflow: 'auto' }}>
+          {displayAlerts.map((alert, index) => (
+            <React.Fragment key={alert.id}>
+              <ListItem
+                sx={{
+                  px: 0,
+                  opacity: alert.isRead ? 0.7 : 1,
+                  backgroundColor: !alert.isRead ? 'action.hover' : 'transparent',
+                  borderRadius: 1,
+                  mb: 0.5,
+                  '&:hover': {
+                    backgroundColor: 'action.selected',
+                  },
+                }}
+              >
+                <ListItemIcon>
+                  <Badge
+                    variant="dot"
+                    color="error"
+                    invisible={alert.isRead}
+                    sx={{
+                      '& .MuiBadge-dot': {
+                        right: 2,
+                        top: 2,
+                      },
+                    }}
+                  >
+                    <Avatar
+                      sx={{
+                        width: 32,
+                        height: 32,
+                        bgcolor: `${getSeverityColor(alert.severity)}.light`,
+                        color: `${getSeverityColor(alert.severity)}.main`,
+                      }}
+                    >
+                      {getAlertIcon(alert.type)}
+                    </Avatar>
+                  </Badge>
+                </ListItemIcon>
+
+                <ListItemText
+                  primary={
+                    <Box display="flex" alignItems="center" gap={1} mb={0.5}>
+                      <Typography 
+                        variant="subtitle2" 
+                        fontWeight={alert.isRead ? 400 : 600}
+                        sx={{ flexGrow: 1 }}
+                      >
+                        {alert.title}
+                      </Typography>
+                      <Chip
+                        label={alert.severity.toUpperCase()}
+                        size="small"
+                        color={getSeverityColor(alert.severity) as any}
+                        variant={alert.isRead ? 'outlined' : 'filled'}
+                      />
+                    </Box>
+                  }
+                  secondary={
+                    <Box>
+                      <Typography 
+                        variant="body2" 
+                        color="text.secondary"
+                        sx={{ 
+                          mb: 0.5,
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        {alert.message}
+                      </Typography>
+                      
+                      <Box display="flex" alignItems="center" justifyContent="space-between">
+                        <Typography variant="caption" color="text.disabled">
+                          {alert.timestamp}
+                          {alert.location && ` • ${alert.location}`}
+                        </Typography>
+                        
+                        <Box display="flex" alignItems="center" gap={0.5}>
+                          {!alert.isRead && (
+                            <Tooltip title="Mark as Read">
+                              <IconButton
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onMarkAsRead?.(alert.id);
+                                }}
+                              >
+                                <Circle fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                          
+                          <Tooltip title="View Details">
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onViewDetails?.(alert);
+                              }}
+                            >
+                              <Visibility fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
+                      </Box>
+                    </Box>
+                  }
+                />
+              </ListItem>
+              
+              {index < displayAlerts.length - 1 && (
+                <Divider variant="inset" component="li" />
+              )}
+            </React.Fragment>
+          ))}
+        </List>
+      )}
+
+      {/* Quick Actions */}
+      {displayAlerts.length > 0 && (
+        <Box sx={{ mt: 2, p: 1, backgroundColor: 'grey.50', borderRadius: 1 }}>
+          <Box display="flex" gap={1} flexWrap="wrap" alignItems="center">
+            <Typography variant="body2" color="text.secondary">
+              Quick Actions:
+            </Typography>
+            <Chip
+              label="Mark All as Read"
+              size="small"
+              variant="outlined"
+              color="primary"
+              clickable
+              disabled={unreadCount === 0}
+            />
+            <Chip
+              label="View All Alerts"
+              size="small"
+              variant="outlined"
+              color="primary"
+              clickable
+            />
+            <Chip
+              label={`${unreadCount} Unread`}
+              size="small"
+              color="error"
+              disabled={unreadCount === 0}
+            />
+          </Box>
+        </Box>
+      )}
+    </Paper>
+  );
+};
+
+export default RecentAlerts;

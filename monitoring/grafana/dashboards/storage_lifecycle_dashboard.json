@@ -1,0 +1,186 @@
+{
+  "dashboard": {
+    "title": "Storage Lifecycle Management",
+    "tags": ["storage", "lifecycle", "costs"],
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "1m",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Storage Distribution by Tier",
+        "type": "piechart",
+        "gridPos": {"x": 0, "y": 0, "w": 8, "h": 8},
+        "targets": [{
+          "datasource": "PostgreSQL",
+          "rawSql": "SELECT storage_tier as metric, SUM(size_bytes)/1024/1024/1024 as value FROM data_catalog WHERE storage_tier != 'DELETED' GROUP BY storage_tier",
+          "format": "table"
+        }],
+        "options": {
+          "pieType": "pie",
+          "legend": {"displayMode": "table", "placement": "right"},
+          "tooltip": {"mode": "single"}
+        }
+      },
+      {
+        "id": 2,
+        "title": "Total Storage by Tier (GB)",
+        "type": "stat",
+        "gridPos": {"x": 8, "y": 0, "w": 16, "h": 4},
+        "targets": [{
+          "datasource": "PostgreSQL",
+          "rawSql": "SELECT storage_tier, SUM(size_bytes)/1024/1024/1024 as size_gb FROM data_catalog WHERE storage_tier != 'DELETED' GROUP BY storage_tier ORDER BY CASE storage_tier WHEN 'HOT' THEN 1 WHEN 'WARM' THEN 2 WHEN 'COLD' THEN 3 WHEN 'ARCHIVE' THEN 4 END",
+          "format": "table"
+        }],
+        "options": {
+          "reduceOptions": {"values": false, "calcs": ["lastNotNull"]},
+          "orientation": "horizontal",
+          "textMode": "value_and_name",
+          "colorMode": "background"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "decgbytes",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 50, "color": "yellow"},
+                {"value": 100, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Monthly Storage Cost Estimate",
+        "type": "stat",
+        "gridPos": {"x": 8, "y": 4, "w": 16, "h": 4},
+        "targets": [{
+          "datasource": "PostgreSQL",
+          "rawSql": "SELECT tier, cost_usd FROM calculate_storage_cost()",
+          "format": "table"
+        }],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD",
+            "decimals": 2,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 250, "color": "yellow"},
+                {"value": 500, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Storage Growth Trend (30 Days)",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 8, "w": 24, "h": 8},
+        "targets": [{
+          "datasource": "PostgreSQL",
+          "rawSql": "SELECT DATE_TRUNC('day', measured_at) as time, tier, AVG(size_gb) as value FROM storage_metrics WHERE measured_at > NOW() - INTERVAL '30 days' GROUP BY DATE_TRUNC('day', measured_at), tier ORDER BY time",
+          "format": "time_series"
+        }],
+        "yaxes": [
+          {"format": "decgbytes", "label": "Storage (GB)"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Files Eligible for Migration",
+        "type": "table",
+        "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
+        "targets": [{
+          "datasource": "PostgreSQL",
+          "rawSql": "SELECT file_path, data_source, storage_tier, size_mb, age_days FROM v_files_for_migration LIMIT 100",
+          "format": "table"
+        }],
+        "options": {
+          "showHeader": true,
+          "sortBy": [{"displayName": "age_days", "desc": true}]
+        }
+      },
+      {
+        "id": 6,
+        "title": "Sentinel Cleanup Candidates",
+        "type": "table",
+        "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
+        "targets": [{
+          "datasource": "PostgreSQL",
+          "rawSql": "SELECT file_path, size_gb, age_days, cloud_cover_percent FROM v_sentinel_cleanup_candidates LIMIT 50",
+          "format": "table"
+        }],
+        "options": {
+          "showHeader": true,
+          "sortBy": [{"displayName": "size_gb", "desc": true}]
+        }
+      },
+      {
+        "id": 7,
+        "title": "Data Quality Score by Source",
+        "type": "bargauge",
+        "gridPos": {"x": 0, "y": 24, "w": 12, "h": 8},
+        "targets": [{
+          "datasource": "PostgreSQL",
+          "rawSql": "SELECT data_source, AVG(quality_score) as avg_quality FROM data_catalog WHERE storage_tier != 'DELETED' AND quality_score IS NOT NULL GROUP BY data_source ORDER BY avg_quality DESC",
+          "format": "table"
+        }],
+        "options": {
+          "orientation": "horizontal",
+          "displayMode": "gradient"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 0.7, "color": "yellow"},
+                {"value": 0.9, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 8,
+        "title": "Recent Retention Actions",
+        "type": "logs",
+        "gridPos": {"x": 12, "y": 24, "w": 12, "h": 8},
+        "targets": [{
+          "datasource": "PostgreSQL",
+          "rawSql": "SELECT executed_at as time, action, from_tier, to_tier, file_path, reason FROM retention_audit_log ORDER BY executed_at DESC LIMIT 100",
+          "format": "table"
+        }]
+      },
+      {
+        "id": 9,
+        "title": "File Count by Data Source",
+        "type": "barchart",
+        "gridPos": {"x": 0, "y": 32, "w": 24, "h": 8},
+        "targets": [{
+          "datasource": "PostgreSQL",
+          "rawSql": "SELECT data_source, COUNT(*) as count FROM data_catalog WHERE storage_tier != 'DELETED' GROUP BY data_source ORDER BY count DESC",
+          "format": "table"
+        }],
+        "options": {
+          "orientation": "horizontal",
+          "xAxis": {"mode": "value"},
+          "legend": {"displayMode": "hidden"}
+        }
+      }
+    ]
+  },
+  "overwrite": true
+}

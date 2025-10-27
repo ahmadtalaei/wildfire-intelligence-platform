@@ -1,0 +1,609 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Box,
+  Paper,
+  Typography,
+  Grid,
+  Card,
+  CardContent,
+  CardActions,
+  Button,
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Chip,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  IconButton,
+  Tooltip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Alert,
+  LinearProgress,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemIcon,
+  Divider,
+} from '@mui/material';
+import {
+  Search,
+  Download,
+  Visibility,
+  FilterList,
+  Storage,
+  Timeline,
+  Map,
+  Satellite,
+  CloudDownload,
+  ExpandMore,
+  PlayArrow,
+  Save,
+  Share,
+  Code,
+  TableChart,
+  Assessment,
+} from '@mui/icons-material';
+
+interface DataSource {
+  id: string;
+  name: string;
+  description: string;
+  type: 'satellite' | 'weather' | 'iot' | 'historical' | 'realtime';
+  lastUpdated: string;
+  recordCount: number;
+  status: 'active' | 'inactive' | 'maintenance';
+  tags: string[];
+}
+
+interface QueryResult {
+  id: string;
+  query: string;
+  resultCount: number;
+  executionTime: number;
+  status: 'running' | 'completed' | 'error';
+  data?: any[];
+}
+
+const DataPortalPage: React.FC = () => {
+  const [dataSources, setDataSources] = useState<DataSource[]>([]);
+  const [selectedSource, setSelectedSource] = useState<string>('');
+  const [queryText, setQueryText] = useState<string>('');
+  const [queryResults, setQueryResults] = useState<QueryResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewData, setPreviewData] = useState<any[]>([]);
+
+  // Query Builder State
+  const [queryBuilder, setQueryBuilder] = useState({
+    dataset: '',
+    columns: [],
+    filters: [{ field: '', operator: '=', value: '' }],
+    timeRange: { start: '', end: '' },
+    limit: 1000,
+  });
+
+  useEffect(() => {
+    // Mock data sources
+    const mockSources: DataSource[] = [
+      {
+        id: 'nasa-firms',
+        name: 'NASA FIRMS Fire Detection',
+        description: 'Real-time fire detection data from MODIS and VIIRS satellites',
+        type: 'satellite',
+        lastUpdated: '2024-09-14T10:30:00Z',
+        recordCount: 15420,
+        status: 'active',
+        tags: ['satellite', 'fire-detection', 'real-time']
+      },
+      {
+        id: 'weather-stations',
+        name: 'California Weather Network',
+        description: 'Weather data from CAL FIRE and RAWS stations',
+        type: 'weather',
+        lastUpdated: '2024-09-14T10:25:00Z',
+        recordCount: 8950,
+        status: 'active',
+        tags: ['weather', 'temperature', 'humidity', 'wind']
+      },
+      {
+        id: 'historical-fires',
+        name: 'Historical Fire Perimeters',
+        description: 'Historical fire boundary data for California (2000-2024)',
+        type: 'historical',
+        lastUpdated: '2024-09-01T00:00:00Z',
+        recordCount: 12840,
+        status: 'active',
+        tags: ['historical', 'perimeters', 'analysis']
+      },
+      {
+        id: 'iot-sensors',
+        name: 'IoT Fire Sensors Network',
+        description: 'Distributed IoT sensors for smoke and temperature monitoring',
+        type: 'iot',
+        lastUpdated: '2024-09-14T10:35:00Z',
+        recordCount: 2150,
+        status: 'active',
+        tags: ['iot', 'sensors', 'smoke', 'temperature']
+      },
+      {
+        id: 'landsat-imagery',
+        name: 'Landsat Satellite Imagery',
+        description: 'Multispectral satellite imagery for vegetation and burn analysis',
+        type: 'satellite',
+        lastUpdated: '2024-09-10T15:00:00Z',
+        recordCount: 892,
+        status: 'active',
+        tags: ['imagery', 'vegetation', 'ndvi', 'burn-severity']
+      }
+    ];
+    setDataSources(mockSources);
+  }, []);
+
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case 'satellite': return <Satellite />;
+      case 'weather': return <Timeline />;
+      case 'iot': return <Storage />;
+      case 'historical': return <Assessment />;
+      case 'realtime': return <PlayArrow />;
+      default: return <TableChart />;
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'active': return 'success';
+      case 'inactive': return 'error';
+      case 'maintenance': return 'warning';
+      default: return 'default';
+    }
+  };
+
+  const handleRunQuery = async () => {
+    if (!queryText.trim() && !selectedSource) return;
+
+    setLoading(true);
+    const queryId = `query-${Date.now()}`;
+
+    // Add query to results with running status
+    const newQuery: QueryResult = {
+      id: queryId,
+      query: queryText || `SELECT * FROM ${selectedSource} LIMIT 100`,
+      resultCount: 0,
+      executionTime: 0,
+      status: 'running'
+    };
+
+    setQueryResults(prev => [newQuery, ...prev]);
+
+    // Simulate query execution
+    setTimeout(() => {
+      const mockData = Array.from({ length: 50 }, (_, i) => ({
+        id: i + 1,
+        timestamp: new Date(Date.now() - Math.random() * 86400000).toISOString(),
+        latitude: 34 + Math.random() * 4,
+        longitude: -120 - Math.random() * 4,
+        confidence: Math.floor(Math.random() * 100),
+        brightness: Math.floor(Math.random() * 500),
+        sensor: Math.random() > 0.5 ? 'MODIS' : 'VIIRS'
+      }));
+
+      setQueryResults(prev => prev.map(q =>
+        q.id === queryId ? {
+          ...q,
+          status: 'completed',
+          resultCount: mockData.length,
+          executionTime: Math.random() * 2000,
+          data: mockData
+        } : q
+      ));
+      setLoading(false);
+    }, 2000);
+  };
+
+  const handlePreviewData = (data: any[]) => {
+    setPreviewData(data);
+    setPreviewOpen(true);
+  };
+
+  const addFilter = () => {
+    setQueryBuilder(prev => ({
+      ...prev,
+      filters: [...prev.filters, { field: '', operator: '=', value: '' }]
+    }));
+  };
+
+  const removeFilter = (index: number) => {
+    setQueryBuilder(prev => ({
+      ...prev,
+      filters: prev.filters.filter((_, i) => i !== index)
+    }));
+  };
+
+  const generateSQLQuery = () => {
+    if (!queryBuilder.dataset) return '';
+
+    let query = `SELECT ${queryBuilder.columns.length ? queryBuilder.columns.join(', ') : '*'}\nFROM ${queryBuilder.dataset}`;
+
+    const validFilters = queryBuilder.filters.filter(f => f.field && f.value);
+    if (validFilters.length > 0) {
+      const whereClause = validFilters.map(f => `${f.field} ${f.operator} '${f.value}'`).join(' AND ');
+      query += `\nWHERE ${whereClause}`;
+    }
+
+    if (queryBuilder.timeRange.start && queryBuilder.timeRange.end) {
+      query += validFilters.length ? ' AND ' : '\nWHERE ';
+      query += `timestamp BETWEEN '${queryBuilder.timeRange.start}' AND '${queryBuilder.timeRange.end}'`;
+    }
+
+    query += `\nLIMIT ${queryBuilder.limit}`;
+
+    return query;
+  };
+
+  return (
+    <Box sx={{ p: 3 }}>
+      {/* Header */}
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h4" gutterBottom>
+          Data Access Portal
+        </Typography>
+        <Typography variant="subtitle1" color="text.secondary">
+          Self-service data access and query builder for CAL FIRE datasets
+        </Typography>
+      </Box>
+
+      <Grid container spacing={3}>
+        {/* Data Sources */}
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 2, height: 'fit-content' }}>
+            <Typography variant="h6" gutterBottom>
+              Available Data Sources
+            </Typography>
+            <Grid container spacing={2}>
+              {dataSources.map((source) => (
+                <Grid item xs={12} key={source.id}>
+                  <Card
+                    variant="outlined"
+                    sx={{
+                      cursor: 'pointer',
+                      border: selectedSource === source.id ? 2 : 1,
+                      borderColor: selectedSource === source.id ? 'primary.main' : 'divider'
+                    }}
+                    onClick={() => setSelectedSource(source.id)}
+                  >
+                    <CardContent sx={{ pb: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                        {getTypeIcon(source.type)}
+                        <Typography variant="h6" sx={{ ml: 1, flexGrow: 1 }}>
+                          {source.name}
+                        </Typography>
+                        <Chip
+                          label={source.status.toUpperCase()}
+                          color={getStatusColor(source.status) as any}
+                          size="small"
+                        />
+                      </Box>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                        {source.description}
+                      </Typography>
+                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 1 }}>
+                        {source.tags.map((tag) => (
+                          <Chip key={tag} label={tag} size="small" variant="outlined" />
+                        ))}
+                      </Box>
+                      <Typography variant="caption" color="text.secondary">
+                        {source.recordCount.toLocaleString()} records • Updated {new Date(source.lastUpdated).toLocaleString()}
+                      </Typography>
+                    </CardContent>
+                    <CardActions>
+                      <Button size="small" startIcon={<Visibility />}>
+                        Preview
+                      </Button>
+                      <Button size="small" startIcon={<Download />}>
+                        Download
+                      </Button>
+                    </CardActions>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          </Paper>
+        </Grid>
+
+        {/* Query Interface */}
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Query Builder
+            </Typography>
+
+            {/* Visual Query Builder */}
+            <Accordion defaultExpanded>
+              <AccordionSummary expandIcon={<ExpandMore />}>
+                <Typography variant="subtitle1">Visual Query Builder</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Dataset</InputLabel>
+                    <Select
+                      value={queryBuilder.dataset}
+                      onChange={(e) => setQueryBuilder(prev => ({ ...prev, dataset: e.target.value }))}
+                      label="Dataset"
+                    >
+                      {dataSources.map((source) => (
+                        <MenuItem key={source.id} value={source.id}>
+                          {source.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+
+                  <Box>
+                    <Typography variant="body2" gutterBottom>Filters</Typography>
+                    {queryBuilder.filters.map((filter, index) => (
+                      <Box key={index} sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'center' }}>
+                        <TextField
+                          size="small"
+                          placeholder="Field"
+                          value={filter.field}
+                          onChange={(e) => setQueryBuilder(prev => ({
+                            ...prev,
+                            filters: prev.filters.map((f, i) =>
+                              i === index ? { ...f, field: e.target.value } : f
+                            )
+                          }))}
+                        />
+                        <Select
+                          size="small"
+                          value={filter.operator}
+                          onChange={(e) => setQueryBuilder(prev => ({
+                            ...prev,
+                            filters: prev.filters.map((f, i) =>
+                              i === index ? { ...f, operator: e.target.value } : f
+                            )
+                          }))}
+                          sx={{ minWidth: 80 }}
+                        >
+                          <MenuItem value="=">=</MenuItem>
+                          <MenuItem value="!=">!=</MenuItem>
+                          <MenuItem value=">">&gt;</MenuItem>
+                          <MenuItem value="<">&lt;</MenuItem>
+                          <MenuItem value=">=">&gt;=</MenuItem>
+                          <MenuItem value="<=">&lt;=</MenuItem>
+                          <MenuItem value="LIKE">LIKE</MenuItem>
+                        </Select>
+                        <TextField
+                          size="small"
+                          placeholder="Value"
+                          value={filter.value}
+                          onChange={(e) => setQueryBuilder(prev => ({
+                            ...prev,
+                            filters: prev.filters.map((f, i) =>
+                              i === index ? { ...f, value: e.target.value } : f
+                            )
+                          }))}
+                        />
+                        <IconButton size="small" onClick={() => removeFilter(index)}>
+                          ✕
+                        </IconButton>
+                      </Box>
+                    ))}
+                    <Button size="small" onClick={addFilter}>Add Filter</Button>
+                  </Box>
+
+                  <Box sx={{ display: 'flex', gap: 2 }}>
+                    <TextField
+                      size="small"
+                      label="Start Date"
+                      type="datetime-local"
+                      value={queryBuilder.timeRange.start}
+                      onChange={(e) => setQueryBuilder(prev => ({
+                        ...prev,
+                        timeRange: { ...prev.timeRange, start: e.target.value }
+                      }))}
+                      InputLabelProps={{ shrink: true }}
+                    />
+                    <TextField
+                      size="small"
+                      label="End Date"
+                      type="datetime-local"
+                      value={queryBuilder.timeRange.end}
+                      onChange={(e) => setQueryBuilder(prev => ({
+                        ...prev,
+                        timeRange: { ...prev.timeRange, end: e.target.value }
+                      }))}
+                      InputLabelProps={{ shrink: true }}
+                    />
+                  </Box>
+
+                  <TextField
+                    size="small"
+                    label="Limit"
+                    type="number"
+                    value={queryBuilder.limit}
+                    onChange={(e) => setQueryBuilder(prev => ({ ...prev, limit: parseInt(e.target.value) || 1000 }))}
+                  />
+                </Box>
+              </AccordionDetails>
+            </Accordion>
+
+            {/* Raw SQL Query */}
+            <Accordion>
+              <AccordionSummary expandIcon={<ExpandMore />}>
+                <Typography variant="subtitle1">SQL Query</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={6}
+                  value={queryText || generateSQLQuery()}
+                  onChange={(e) => setQueryText(e.target.value)}
+                  placeholder="Enter SQL query or use the visual builder above..."
+                  sx={{ fontFamily: 'monospace' }}
+                />
+              </AccordionDetails>
+            </Accordion>
+
+            <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
+              <Button
+                variant="contained"
+                startIcon={<PlayArrow />}
+                onClick={handleRunQuery}
+                disabled={loading}
+              >
+                Run Query
+              </Button>
+              <Button startIcon={<Save />}>Save Query</Button>
+              <Button startIcon={<Share />}>Share</Button>
+            </Box>
+          </Paper>
+        </Grid>
+
+        {/* Query Results */}
+        <Grid item xs={12}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Query Results
+            </Typography>
+
+            {loading && (
+              <Box sx={{ mb: 2 }}>
+                <LinearProgress />
+                <Typography variant="body2" sx={{ mt: 1 }}>
+                  Executing query...
+                </Typography>
+              </Box>
+            )}
+
+            {queryResults.length === 0 ? (
+              <Box sx={{ textAlign: 'center', py: 4 }}>
+                <Code sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
+                <Typography variant="h6" color="text.secondary">
+                  No queries executed yet
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Build a query above to see results here
+                </Typography>
+              </Box>
+            ) : (
+              <List>
+                {queryResults.map((result) => (
+                  <ListItem key={result.id} sx={{ border: 1, borderColor: 'divider', borderRadius: 1, mb: 1 }}>
+                    <ListItemIcon>
+                      {result.status === 'running' && <LinearProgress sx={{ width: 30 }} />}
+                      {result.status === 'completed' && <TableChart color="success" />}
+                      {result.status === 'error' && <Typography color="error">⚠</Typography>}
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Typography variant="body2" sx={{ fontFamily: 'monospace', flex: 1 }}>
+                            {result.query.length > 50 ? result.query.substring(0, 50) + '...' : result.query}
+                          </Typography>
+                          {result.status === 'completed' && (
+                            <>
+                              <Chip
+                                label={`${result.resultCount} rows`}
+                                size="small"
+                                color="primary"
+                              />
+                              <Chip
+                                label={`${Math.round(result.executionTime)}ms`}
+                                size="small"
+                                variant="outlined"
+                              />
+                            </>
+                          )}
+                        </Box>
+                      }
+                      secondary={result.status === 'completed' ? 'Query completed successfully' : 'Running...'}
+                    />
+                    {result.status === 'completed' && result.data && (
+                      <Box sx={{ display: 'flex', gap: 1 }}>
+                        <Button
+                          size="small"
+                          startIcon={<Visibility />}
+                          onClick={() => handlePreviewData(result.data || [])}
+                        >
+                          Preview
+                        </Button>
+                        <Button size="small" startIcon={<Download />}>
+                          Download
+                        </Button>
+                      </Box>
+                    )}
+                  </ListItem>
+                ))}
+              </List>
+            )}
+          </Paper>
+        </Grid>
+      </Grid>
+
+      {/* Preview Dialog */}
+      <Dialog
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        maxWidth="lg"
+        fullWidth
+      >
+        <DialogTitle>Data Preview</DialogTitle>
+        <DialogContent>
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  {previewData[0] && Object.keys(previewData[0]).map((key) => (
+                    <TableCell key={key}>{key}</TableCell>
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {previewData.slice(0, 10).map((row, index) => (
+                  <TableRow key={index}>
+                    {Object.values(row).map((value: any, cellIndex) => (
+                      <TableCell key={cellIndex}>
+                        {typeof value === 'string' && value.length > 30
+                          ? value.substring(0, 30) + '...'
+                          : String(value)
+                        }
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          {previewData.length > 10 && (
+            <Alert severity="info" sx={{ mt: 2 }}>
+              Showing first 10 rows of {previewData.length} total results
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPreviewOpen(false)}>Close</Button>
+          <Button variant="contained" startIcon={<Download />}>
+            Download Full Dataset
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+};
+
+export default DataPortalPage;

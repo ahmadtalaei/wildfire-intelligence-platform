@@ -1,0 +1,89 @@
+{
+  "type": "record",
+  "name": "WeatherObservation",
+  "namespace": "com.wildfire.streaming",
+  "doc": "Avro schema for weather observation events from NOAA and other meteorological sources",
+  "fields": [
+    {
+      "name": "observation_id",
+      "type": "string",
+      "doc": "Unique identifier for this weather observation"
+    },
+    {
+      "name": "station_id",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Weather station identifier (e.g., KOVE for Oroville, CA)"
+    },
+    {
+      "name": "latitude",
+      "type": "double",
+      "doc": "Station latitude in decimal degrees (WGS84)"
+    },
+    {
+      "name": "longitude",
+      "type": "double",
+      "doc": "Station longitude in decimal degrees (WGS84)"
+    },
+    {
+      "name": "timestamp",
+      "type": "long",
+      "logicalType": "timestamp-millis",
+      "doc": "Observation timestamp in milliseconds since Unix epoch (UTC)"
+    },
+    {
+      "name": "temperature",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Air temperature in degrees Celsius"
+    },
+    {
+      "name": "relative_humidity",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Relative humidity as percentage (0-100)"
+    },
+    {
+      "name": "wind_speed",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Wind speed in km/h"
+    },
+    {
+      "name": "wind_direction",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Wind direction in degrees (0-360, 0=North, 90=East)"
+    },
+    {
+      "name": "pressure",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Barometric pressure in Pascals (Pa)"
+    },
+    {
+      "name": "precipitation",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Precipitation in millimeters"
+    },
+    {
+      "name": "visibility",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Visibility in meters"
+    },
+    {
+      "name": "cloud_cover",
+      "type": ["null", "int"],
+      "default": null,
+      "doc": "Cloud cover percentage (0-100), or octas (0-8)"
+    },
+    {
+      "name": "dewpoint",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Dewpoint temperature in degrees Celsius"
+    }
+  ]
+}

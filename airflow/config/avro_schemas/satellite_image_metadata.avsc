@@ -1,0 +1,98 @@
+{
+  "type": "record",
+  "name": "SatelliteImageMetadata",
+  "namespace": "com.wildfire.streaming",
+  "doc": "Avro schema for satellite imagery metadata from Landsat, Sentinel, and other Earth observation satellites",
+  "fields": [
+    {
+      "name": "scene_id",
+      "type": "string",
+      "doc": "Unique scene identifier (e.g., LC09_L2SP_044033_20250104_20250104_02_T1)"
+    },
+    {
+      "name": "satellite",
+      "type": "string",
+      "doc": "Satellite name (e.g., Landsat-9, Sentinel-2A, Sentinel-3B)"
+    },
+    {
+      "name": "sensor",
+      "type": "string",
+      "doc": "Sensor/instrument name (e.g., OLI-TIRS, MSI, SLSTR)"
+    },
+    {
+      "name": "acquisition_date",
+      "type": "long",
+      "logicalType": "timestamp-millis",
+      "doc": "Image acquisition timestamp in milliseconds since Unix epoch (UTC)"
+    },
+    {
+      "name": "cloud_cover_percent",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Cloud cover percentage (0-100)"
+    },
+    {
+      "name": "bbox_north",
+      "type": "double",
+      "doc": "Bounding box northern latitude in decimal degrees"
+    },
+    {
+      "name": "bbox_south",
+      "type": "double",
+      "doc": "Bounding box southern latitude in decimal degrees"
+    },
+    {
+      "name": "bbox_east",
+      "type": "double",
+      "doc": "Bounding box eastern longitude in decimal degrees"
+    },
+    {
+      "name": "bbox_west",
+      "type": "double",
+      "doc": "Bounding box western longitude in decimal degrees"
+    },
+    {
+      "name": "center_lat",
+      "type": "double",
+      "doc": "Scene center latitude in decimal degrees"
+    },
+    {
+      "name": "center_lon",
+      "type": "double",
+      "doc": "Scene center longitude in decimal degrees"
+    },
+    {
+      "name": "processing_level",
+      "type": "string",
+      "doc": "Processing level (e.g., L1C, L2A, L2SP for surface temperature)"
+    },
+    {
+      "name": "file_size_mb",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "File size in megabytes"
+    },
+    {
+      "name": "file_format",
+      "type": "string",
+      "doc": "File format (e.g., GeoTIFF, COG, NetCDF, HDF5)"
+    },
+    {
+      "name": "storage_path",
+      "type": "string",
+      "doc": "MinIO/S3 storage path (e.g., s3://wildfire-data/satellite/landsat/...)"
+    },
+    {
+      "name": "image_hash",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "SHA256 hash of image file for integrity verification"
+    },
+    {
+      "name": "has_fire_signature",
+      "type": ["null", "boolean"],
+      "default": null,
+      "doc": "Boolean flag indicating if thermal anomalies/fire signatures detected"
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+@echo off
+REM ============================================================================
+REM Auto-Start All Wildfire Data Collection
+REM Automatically starts and monitors all real-time data collectors
+REM ============================================================================
+
+echo.
+echo =============================================================================
+echo 🔥 Wildfire Intelligence Platform - Auto Data Collection
+echo =============================================================================
+echo.
+
+REM Check if Python is available
+python --version >nul 2>&1
+if errorlevel 1 (
+    echo ❌ ERROR: Python is not installed or not in PATH
+    echo Please install Python 3.8+ and try again
+    pause
+    exit /b 1
+)
+
+REM Check if we're in the right directory
+if not exist "auto_start_all_collectors.py" (
+    echo ❌ ERROR: auto_start_all_collectors.py not found
+    echo Please run this from the scripts/data-loading directory
+    pause
+    exit /b 1
+)
+
+REM Install required dependencies
+echo 📦 Installing required dependencies...
+pip install psutil >nul 2>&1
+if errorlevel 1 (
+    echo ⚠️ WARNING: Could not install psutil - process monitoring may not work
+)
+
+echo.
+echo 🚀 Starting Wildfire Data Collection System...
+echo.
+echo This will start the following collectors:
+echo   • NASA FIRMS Satellite Fire Detection
+echo   • NOAA Weather Data Collection  
+echo   • CAL FIRE Incident Tracking
+echo   • IoT Sensor Network Monitoring
+echo.
+echo Press Ctrl+C to stop all collectors
+echo.
+
+REM Start the auto collector manager
+python auto_start_all_collectors.py
+
+echo.
+echo ✅ Data collection system has been stopped
+echo.
+pause

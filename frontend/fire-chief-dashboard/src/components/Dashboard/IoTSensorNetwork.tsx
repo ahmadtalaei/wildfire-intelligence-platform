@@ -1,0 +1,615 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Card,
+  CardHeader,
+  CardContent,
+  Typography,
+  Box,
+  Grid,
+  Avatar,
+  Chip,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  IconButton,
+  Tooltip,
+  Alert,
+  LinearProgress,
+  Badge,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemIcon,
+  Divider,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+} from '@mui/material';
+import {
+  Sensors,
+  Warning,
+  CheckCircle,
+  BatteryAlert,
+  SignalWifiOff,
+  Air,
+  Thermostat,
+  WaterDrop,
+  Visibility,
+  Map,
+  Refresh,
+  BatteryFull,
+  SignalWifi4Bar,
+  LocationOn,
+  Schedule,
+  TrendingUp,
+  TrendingDown,
+  Error,
+} from '@mui/icons-material';
+
+interface IoTSensor {
+  id: string;
+  name: string;
+  type: 'air_quality' | 'weather' | 'smoke' | 'multi_sensor';
+  location: {
+    name: string;
+    latitude: number;
+    longitude: number;
+    elevation: number;
+  };
+  status: 'online' | 'offline' | 'warning' | 'error';
+  batteryLevel: number;
+  signalStrength: number;
+  lastHeartbeat: Date;
+  measurements: {
+    pm25: number;
+    pm10: number;
+    temperature: number;
+    humidity: number;
+    pressure: number;
+    co: number;
+    no2: number;
+    o3: number;
+    smokeDensity: number;
+    visibility: number;
+  };
+  alerts: {
+    airQualityAlert: boolean;
+    smokeAlert: boolean;
+    temperatureAlert: boolean;
+    offlineAlert: boolean;
+  };
+  installDate: Date;
+  lastMaintenance: Date;
+}
+
+const IoTSensorNetwork: React.FC = () => {
+  const [sensors, setSensors] = useState<IoTSensor[]>([]);
+  const [selectedZone, setSelectedZone] = useState<string>('All');
+  const [alertFilter, setAlertFilter] = useState<string>('All');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    // Mock IoT sensor network data
+    const mockSensors: IoTSensor[] = [
+      {
+        id: 'IOT-001',
+        name: 'Angeles Crest Monitor',
+        type: 'multi_sensor',
+        location: {
+          name: 'Angeles National Forest - Station 1',
+          latitude: 34.3774,
+          longitude: -118.0167,
+          elevation: 5950
+        },
+        status: 'warning',
+        batteryLevel: 85,
+        signalStrength: 92,
+        lastHeartbeat: new Date(Date.now() - 180000),
+        measurements: {
+          pm25: 187, // Very Unhealthy
+          pm10: 245,
+          temperature: 92,
+          humidity: 8,
+          pressure: 1013.25,
+          co: 8.5,
+          no2: 45,
+          o3: 120,
+          smokeDensity: 3.2,
+          visibility: 1.2
+        },
+        alerts: {
+          airQualityAlert: true,
+          smokeAlert: true,
+          temperatureAlert: true,
+          offlineAlert: false
+        },
+        installDate: new Date('2023-03-15'),
+        lastMaintenance: new Date('2024-08-01')
+      },
+      {
+        id: 'IOT-002',
+        name: 'Simi Hills Monitor',
+        type: 'air_quality',
+        location: {
+          name: 'Simi Valley - Residential Area',
+          latitude: 34.2694,
+          longitude: -118.7317,
+          elevation: 1840
+        },
+        status: 'online',
+        batteryLevel: 67,
+        signalStrength: 78,
+        lastHeartbeat: new Date(Date.now() - 120000),
+        measurements: {
+          pm25: 145, // Unhealthy for Sensitive Groups
+          pm10: 190,
+          temperature: 89,
+          humidity: 12,
+          pressure: 1015.2,
+          co: 6.2,
+          no2: 38,
+          o3: 95,
+          smokeDensity: 2.1,
+          visibility: 2.8
+        },
+        alerts: {
+          airQualityAlert: true,
+          smokeAlert: false,
+          temperatureAlert: false,
+          offlineAlert: false
+        },
+        installDate: new Date('2023-01-20'),
+        lastMaintenance: new Date('2024-07-15')
+      },
+      {
+        id: 'IOT-003',
+        name: 'Mount Wilson Observatory',
+        type: 'weather',
+        location: {
+          name: 'Mount Wilson Observatory',
+          latitude: 34.2257,
+          longitude: -118.0608,
+          elevation: 5710
+        },
+        status: 'online',
+        batteryLevel: 92,
+        signalStrength: 95,
+        lastHeartbeat: new Date(Date.now() - 60000),
+        measurements: {
+          pm25: 45, // Moderate
+          pm10: 78,
+          temperature: 78,
+          humidity: 22,
+          pressure: 1018.7,
+          co: 2.1,
+          no2: 15,
+          o3: 68,
+          smokeDensity: 0.3,
+          visibility: 8.5
+        },
+        alerts: {
+          airQualityAlert: false,
+          smokeAlert: false,
+          temperatureAlert: false,
+          offlineAlert: false
+        },
+        installDate: new Date('2022-11-10'),
+        lastMaintenance: new Date('2024-09-01')
+      },
+      {
+        id: 'IOT-004',
+        name: 'Malibu Canyon Sensor',
+        type: 'smoke',
+        location: {
+          name: 'Malibu Canyon Road',
+          latitude: 34.0837,
+          longitude: -118.7473,
+          elevation: 890
+        },
+        status: 'error',
+        batteryLevel: 15,
+        signalStrength: 45,
+        lastHeartbeat: new Date(Date.now() - 1800000), // 30 minutes ago
+        measurements: {
+          pm25: 0,
+          pm10: 0,
+          temperature: 0,
+          humidity: 0,
+          pressure: 0,
+          co: 0,
+          no2: 0,
+          o3: 0,
+          smokeDensity: 0,
+          visibility: 0
+        },
+        alerts: {
+          airQualityAlert: false,
+          smokeAlert: false,
+          temperatureAlert: false,
+          offlineAlert: true
+        },
+        installDate: new Date('2023-05-08'),
+        lastMaintenance: new Date('2024-06-20')
+      }
+    ];
+
+    setSensors(mockSensors);
+
+    // Simulate real-time updates
+    const interval = setInterval(() => {
+      setSensors(prev => prev.map(sensor => ({
+        ...sensor,
+        measurements: {
+          ...sensor.measurements,
+          pm25: sensor.status === 'online' ? sensor.measurements.pm25 + (Math.random() - 0.5) * 10 : sensor.measurements.pm25,
+          temperature: sensor.status === 'online' ? sensor.measurements.temperature + (Math.random() - 0.5) * 2 : sensor.measurements.temperature,
+          humidity: sensor.status === 'online' ? Math.max(0, sensor.measurements.humidity + (Math.random() - 0.5) * 2) : sensor.measurements.humidity,
+        },
+        lastHeartbeat: sensor.status === 'online' ? new Date() : sensor.lastHeartbeat
+      })));
+    }, 30000); // Update every 30 seconds
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'online': return 'success';
+      case 'offline': return 'error';
+      case 'warning': return 'warning';
+      case 'error': return 'error';
+      default: return 'default';
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'online': return <CheckCircle color="success" />;
+      case 'offline': return <SignalWifiOff color="error" />;
+      case 'warning': return <Warning color="warning" />;
+      case 'error': return <Error color="error" />;
+      default: return <CheckCircle />;
+    }
+  };
+
+  const getAQILevel = (pm25: number) => {
+    if (pm25 <= 12) return { level: 'Good', color: 'success' };
+    if (pm25 <= 35) return { level: 'Moderate', color: 'info' };
+    if (pm25 <= 55) return { level: 'USG', color: 'warning' }; // Unhealthy for Sensitive Groups
+    if (pm25 <= 150) return { level: 'Unhealthy', color: 'error' };
+    if (pm25 <= 250) return { level: 'Very Unhealthy', color: 'error' };
+    return { level: 'Hazardous', color: 'error' };
+  };
+
+  const getBatteryIcon = (level: number) => {
+    if (level > 50) return <BatteryFull color="success" />;
+    if (level > 20) return <BatteryAlert color="warning" />;
+    return <BatteryAlert color="error" />;
+  };
+
+  const getSignalIcon = (strength: number) => {
+    if (strength > 70) return <SignalWifi4Bar color="success" />;
+    if (strength > 30) return <SignalWifi4Bar color="warning" />;
+    return <SignalWifiOff color="error" />;
+  };
+
+  const filteredSensors = sensors.filter(sensor => {
+    const matchesZone = selectedZone === 'All' || sensor.location.name.includes(selectedZone);
+    const matchesAlert = alertFilter === 'All' ||
+      (alertFilter === 'Alerts' && (sensor.alerts.airQualityAlert || sensor.alerts.smokeAlert || sensor.alerts.temperatureAlert || sensor.alerts.offlineAlert)) ||
+      (alertFilter === 'Online' && sensor.status === 'online') ||
+      (alertFilter === 'Offline' && (sensor.status === 'offline' || sensor.status === 'error'));
+
+    return matchesZone && matchesAlert;
+  });
+
+  const onlineSensors = sensors.filter(s => s.status === 'online').length;
+  const alertSensors = sensors.filter(s =>
+    s.alerts.airQualityAlert || s.alerts.smokeAlert || s.alerts.temperatureAlert || s.alerts.offlineAlert
+  ).length;
+  const lowBatterySensors = sensors.filter(s => s.batteryLevel < 20).length;
+
+  const refreshNetwork = async () => {
+    setLoading(true);
+    setTimeout(() => {
+      setLoading(false);
+      setSensors(prev => prev.map(sensor => ({
+        ...sensor,
+        lastHeartbeat: sensor.status === 'online' ? new Date() : sensor.lastHeartbeat
+      })));
+    }, 2000);
+  };
+
+  return (
+    <Card sx={{ height: '100%' }}>
+      <CardHeader
+        avatar={
+          <Avatar sx={{ bgcolor: 'warning.main' }}>
+            <Sensors />
+          </Avatar>
+        }
+        title="IoT Sensor Network"
+        subheader={
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+            <Typography variant="caption" color="text.secondary">
+              Environmental Monitoring Network
+            </Typography>
+            <Badge badgeContent={alertSensors} color="error">
+              <Chip
+                label={`${onlineSensors}/${sensors.length} ONLINE`}
+                color="success"
+                size="small"
+              />
+            </Badge>
+          </Box>
+        }
+        action={
+          <Tooltip title="Refresh Network Status">
+            <IconButton onClick={refreshNetwork} disabled={loading}>
+              <Refresh />
+            </IconButton>
+          </Tooltip>
+        }
+      />
+
+      <CardContent>
+        {loading && <LinearProgress sx={{ mb: 2 }} />}
+
+        {/* Network Alerts */}
+        {alertSensors > 0 && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            <Typography variant="body2">
+              <strong>Network Alerts:</strong> {alertSensors} sensor{alertSensors > 1 ? 's' : ''}
+              {' '}reporting critical conditions or connectivity issues.
+            </Typography>
+          </Alert>
+        )}
+
+        {lowBatterySensors > 0 && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            <Typography variant="body2">
+              <strong>Maintenance Required:</strong> {lowBatterySensors} sensor{lowBatterySensors > 1 ? 's' : ''}
+              {' '}have low battery levels requiring immediate attention.
+            </Typography>
+          </Alert>
+        )}
+
+        {/* Network Status Summary */}
+        <Grid container spacing={2} sx={{ mb: 3 }}>
+          <Grid item xs={3}>
+            <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'success.light', borderRadius: 1, color: 'white' }}>
+              <CheckCircle sx={{ fontSize: 24, mb: 0.5 }} />
+              <Typography variant="h6">{onlineSensors}</Typography>
+              <Typography variant="caption">Online</Typography>
+            </Box>
+          </Grid>
+          <Grid item xs={3}>
+            <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'error.light', borderRadius: 1, color: 'white' }}>
+              <Warning sx={{ fontSize: 24, mb: 0.5 }} />
+              <Typography variant="h6">{alertSensors}</Typography>
+              <Typography variant="caption">Alerts</Typography>
+            </Box>
+          </Grid>
+          <Grid item xs={3}>
+            <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'warning.light', borderRadius: 1, color: 'white' }}>
+              <BatteryAlert sx={{ fontSize: 24, mb: 0.5 }} />
+              <Typography variant="h6">{lowBatterySensors}</Typography>
+              <Typography variant="caption">Low Battery</Typography>
+            </Box>
+          </Grid>
+          <Grid item xs={3}>
+            <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'info.light', borderRadius: 1, color: 'white' }}>
+              <Sensors sx={{ fontSize: 24, mb: 0.5 }} />
+              <Typography variant="h6">{sensors.length}</Typography>
+              <Typography variant="caption">Total Sensors</Typography>
+            </Box>
+          </Grid>
+        </Grid>
+
+        {/* Filters */}
+        <Grid container spacing={2} sx={{ mb: 2 }}>
+          <Grid item xs={6}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Zone</InputLabel>
+              <Select
+                value={selectedZone}
+                onChange={(e) => setSelectedZone(e.target.value)}
+                label="Zone"
+              >
+                <MenuItem value="All">All Zones</MenuItem>
+                <MenuItem value="Angeles">Angeles Forest</MenuItem>
+                <MenuItem value="Simi">Simi Valley</MenuItem>
+                <MenuItem value="Mount Wilson">Mount Wilson</MenuItem>
+                <MenuItem value="Malibu">Malibu</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={6}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Status</InputLabel>
+              <Select
+                value={alertFilter}
+                onChange={(e) => setAlertFilter(e.target.value)}
+                label="Status"
+              >
+                <MenuItem value="All">All Sensors</MenuItem>
+                <MenuItem value="Alerts">Active Alerts</MenuItem>
+                <MenuItem value="Online">Online Only</MenuItem>
+                <MenuItem value="Offline">Offline/Error</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+        </Grid>
+
+        <Divider sx={{ my: 2 }} />
+
+        {/* Sensor Details */}
+        <Typography variant="h6" gutterBottom>
+          Sensor Status
+        </Typography>
+
+        <TableContainer sx={{ maxHeight: 400 }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Sensor</TableCell>
+                <TableCell>Air Quality</TableCell>
+                <TableCell>Weather</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell>Battery</TableCell>
+                <TableCell>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filteredSensors.map((sensor) => {
+                const aqi = getAQILevel(sensor.measurements.pm25);
+                const minutesAgo = Math.round((Date.now() - sensor.lastHeartbeat.getTime()) / 60000);
+
+                return (
+                  <TableRow key={sensor.id} hover>
+                    <TableCell>
+                      <Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                          <Sensors fontSize="small" />
+                          <Typography variant="body2" fontWeight="medium">
+                            {sensor.name}
+                          </Typography>
+                        </Box>
+                        <Typography variant="caption" color="text.secondary" display="block">
+                          <LocationOn sx={{ fontSize: 12, mr: 0.5 }} />
+                          {sensor.location.name}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {sensor.location.latitude.toFixed(3)}, {sensor.location.longitude.toFixed(3)}
+                        </Typography>
+                      </Box>
+                    </TableCell>
+
+                    <TableCell>
+                      {sensor.status === 'online' ? (
+                        <Box>
+                          <Chip
+                            label={`PM2.5: ${sensor.measurements.pm25}`}
+                            color={aqi.color as any}
+                            size="small"
+                          />
+                          <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
+                            {aqi.level}
+                          </Typography>
+                          {sensor.alerts.airQualityAlert && (
+                            <Typography variant="caption" color="error.main" display="block">
+                              [WARNING] Air Quality Alert
+                            </Typography>
+                          )}
+                          {sensor.alerts.smokeAlert && (
+                            <Typography variant="caption" color="error.main" display="block">
+                              [FIRE] Smoke Detected
+                            </Typography>
+                          )}
+                        </Box>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">
+                          No Data
+                        </Typography>
+                      )}
+                    </TableCell>
+
+                    <TableCell>
+                      {sensor.status === 'online' ? (
+                        <Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Thermostat fontSize="small" color="error" />
+                            <Typography variant="body2">
+                              {sensor.measurements.temperature}degF
+                            </Typography>
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <WaterDrop fontSize="small" color="primary" />
+                            <Typography variant="body2">
+                              {sensor.measurements.humidity}%
+                            </Typography>
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Visibility fontSize="small" color="info" />
+                            <Typography variant="body2">
+                              {sensor.measurements.visibility} mi
+                            </Typography>
+                          </Box>
+                        </Box>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">
+                          Offline
+                        </Typography>
+                      )}
+                    </TableCell>
+
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                        {getStatusIcon(sensor.status)}
+                        <Typography variant="body2" color={`${getStatusColor(sensor.status)}.main`}>
+                          {sensor.status.toUpperCase()}
+                        </Typography>
+                      </Box>
+                      <Typography variant="caption" color="text.secondary">
+                        <Schedule sx={{ fontSize: 12, mr: 0.5 }} />
+                        {minutesAgo}m ago
+                      </Typography>
+                      <br />
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        {getSignalIcon(sensor.signalStrength)}
+                        <Typography variant="caption">
+                          {sensor.signalStrength}%
+                        </Typography>
+                      </Box>
+                    </TableCell>
+
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                        {getBatteryIcon(sensor.batteryLevel)}
+                        <Typography
+                          variant="body2"
+                          color={sensor.batteryLevel < 20 ? 'error.main' : 'text.primary'}
+                        >
+                          {sensor.batteryLevel}%
+                        </Typography>
+                      </Box>
+                      <Typography variant="caption" color="text.secondary">
+                        Last Maint: {sensor.lastMaintenance.toLocaleDateString()}
+                      </Typography>
+                    </TableCell>
+
+                    <TableCell>
+                      <Tooltip title="View on Map">
+                        <IconButton size="small">
+                          <Map />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Sensor Details">
+                        <IconButton size="small">
+                          <Visibility />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </TableContainer>
+
+        <Alert severity="info" sx={{ mt: 2 }}>
+          <Typography variant="body2">
+            <strong>IoT Network:</strong> Distributed environmental sensors provide real-time
+            air quality, weather, and smoke detection data for early warning and situational awareness.
+          </Typography>
+        </Alert>
+      </CardContent>
+    </Card>
+  );
+};
+
+export default IoTSensorNetwork;

@@ -1,0 +1,186 @@
+# Live Fire Data Integration Setup
+
+## Overview
+
+The application now integrates **live fire data** from multiple authoritative sources:
+
+1. **CAL FIRE Official Incidents** - California's official fire incident database
+2. **NASA FIRMS Satellite Detection** - Real-time MODIS/VIIRS satellite fire detection
+
+## Data Sources
+
+### 1. CAL FIRE Incidents API
+
+**Endpoints Used:**
+- GeoJSON API: `https://incidents.fire.ca.gov/umbraco/api/IncidentApi/GeoJsonList?inactive=false`
+- JSON API: `https://incidents.fire.ca.gov/umbraco/api/IncidentApi/List?inactive=false`
+- CSV Fallback: `https://incidents.fire.ca.gov/imapdata/mapdataall.csv`
+
+**Data Includes:**
+- Official fire incident locations
+- Acres burned and containment percentages
+- Resources deployed and personnel
+- Structure damage and threats
+- Evacuation and road closure status
+- Direct links to official CAL FIRE incident pages
+
+**Update Frequency:** 5 minutes
+
+### 2. NASA FIRMS Satellite Detection
+
+**Endpoints Used:**
+- MODIS: `https://firms.modaps.eosdis.nasa.gov/api/area/csv/{API_KEY}/MODIS_C6_1/{bbox}/1/{date}`
+- VIIRS: `https://firms.modaps.eosdis.nasa.gov/api/area/csv/{API_KEY}/VIIRS_SNPP_375m/{bbox}/1/{date}`
+
+**Data Includes:**
+- Real-time satellite fire detections
+- Fire Radiative Power (FRP) measurements
+- Confidence levels and acquisition times
+- Satellite source (Terra, Aqua, Suomi-NPP, NOAA-20/21)
+- Instrument details (MODIS/VIIRS)
+
+**Update Frequency:** Real-time (satellite overpass dependent)
+
+## NASA FIRMS API Key Setup
+
+### Step 1: Register for NASA FIRMS API Key
+
+1. Visit: https://firms.modaps.eosdis.nasa.gov/api/
+2. Click "Get MAP_KEY" or go to: https://firms.modaps.eosdis.nasa.gov/api/request/
+3. Fill out the registration form:
+   - **Name:** Your full name
+   - **Email:** Your email address
+   - **Organization:** Your organization/company
+   - **Intended Use:** "Wildfire monitoring and emergency response"
+   - **Website/Application:** Your application URL (or github repo)
+
+### Step 2: Verify Email and Get API Key
+
+1. Check your email for NASA FIRMS verification
+2. Click the verification link
+3. Your API key will be sent to your email
+4. Copy the MAP_KEY (looks like: `abcd1234-5678-90ef-ghij-klmnopqrstuv`)
+
+### Step 3: Configure API Key in Application
+
+**Option A: Environment Variable (Recommended)**
+```bash
+# In .env.local file
+REACT_APP_NASA_FIRMS_API_KEY=your_api_key_here
+```
+
+**Option B: Direct Configuration**
+```typescript
+// In src/services/LiveFireDataService.ts
+private mapKey = 'your_api_key_here'; // Replace with your actual key
+```
+
+### Step 4: API Rate Limits
+
+- **Limit:** 5,000 requests per 10-minute interval
+- **Current Usage:** ~4 requests every 5 minutes (well within limits)
+- **Monitoring:** API usage is logged in browser console
+
+## Fire Data Display Features
+
+### CAL FIRE Incidents (Red Markers 🔥)
+- **Size:** Scales with fire acreage (logarithmic)
+- **Color:**
+  - Green: 100% contained
+  - Orange: 50-99% contained
+  - Red: 0-49% contained
+- **Animation:** Slow pulse (3 seconds)
+- **Popup:** Comprehensive incident details with link to official CAL FIRE page
+
+### NASA FIRMS Detections (Colored Dots 🛰️)
+- **Size:** Scales with Fire Radiative Power (FRP)
+- **Color:**
+  - Orange: MODIS detections
+  - Teal: VIIRS detections
+- **Animation:** Fast pulse (2 seconds)
+- **Popup:** Satellite detection metadata and confidence levels
+
+## Current Data Coverage
+
+**Geographic Coverage:**
+- California statewide (32°N to 42°N, -125°W to -114°W)
+- Includes border areas with Oregon, Nevada, Arizona, and Mexico
+
+**Temporal Coverage:**
+- CAL FIRE: All active incidents
+- NASA FIRMS: Last 24 hours of detections
+- Historical data available on request
+
+## Data Quality and Reliability
+
+### CAL FIRE Data
+- **Accuracy:** Official government source (100% reliable for reported incidents)
+- **Completeness:** All officially declared incidents
+- **Timeliness:** Updated as incidents are reported and managed
+- **Limitations:** May not include very small fires or private land fires not reported to CAL FIRE
+
+### NASA FIRMS Data
+- **Accuracy:** Satellite-based detection with confidence ratings
+- **Completeness:** Covers all of California multiple times daily
+- **Timeliness:** Near real-time (within 3 hours of satellite overpass)
+- **Limitations:**
+  - Weather dependent (clouds can block detection)
+  - May include false positives (industrial heat sources, flares)
+  - Minimum detectable fire size varies by conditions
+
+## Integration Benefits
+
+### For Fire Chiefs:
+1. **Comprehensive Coverage:** Official incidents + satellite detections
+2. **Early Detection:** Satellite data may detect fires before official reporting
+3. **Verification:** Cross-reference CAL FIRE reports with satellite data
+4. **Resource Planning:** Real-time fire activity across entire state
+
+### For Emergency Responders:
+1. **Situational Awareness:** Complete picture of fire activity
+2. **Pattern Recognition:** Identify fire clusters and trends
+3. **Response Prioritization:** Focus on uncontained/growing fires
+4. **Public Information:** Official data for media and public communications
+
+## Troubleshooting
+
+### No Fire Data Showing
+1. **Check API Key:** Ensure NASA FIRMS key is configured correctly
+2. **Check Console:** Look for API errors in browser developer tools
+3. **Check Network:** Ensure firewall allows API requests
+4. **Check Date:** NASA FIRMS only shows recent detections (24 hours)
+
+### Partial Data
+1. **CAL FIRE Only:** NASA FIRMS API key missing or invalid
+2. **NASA FIRMS Only:** CAL FIRE APIs temporarily unavailable
+3. **Coverage Indicators:** Check the data coverage badges in the UI
+
+### Performance Issues
+1. **Too Many Markers:** Adjust confidence threshold in code
+2. **Slow Loading:** APIs are rate-limited, wait for cache refresh
+3. **Memory Usage:** Large datasets may impact browser performance
+
+## Future Enhancements
+
+### Additional Data Sources
+- **InciWeb:** National incident information
+- **MODIS/VIIRS Fire Perimeters:** Actual fire boundary polygons
+- **Fire Weather Stations:** Real-time weather at fire locations
+- **Evacuation Zones:** Official evacuation boundaries
+
+### Advanced Features
+- **Fire Spread Modeling:** Integrate with weather data for predictions
+- **Historical Analysis:** Compare current fires to historical patterns
+- **Risk Assessment:** Combine fire data with population/infrastructure data
+- **Mobile Notifications:** Push alerts for new fire activity
+
+## Data Sources Attribution
+
+- **CAL FIRE:** California Department of Forestry and Fire Protection
+- **NASA FIRMS:** NASA Land, Atmosphere Near real-time Capability for EOS (LANCE)
+- **MODIS:** Terra and Aqua satellites (NASA)
+- **VIIRS:** Suomi-NPP, NOAA-20, and NOAA-21 satellites (NOAA/NASA)
+
+---
+
+**Note:** This system provides near real-time fire information for situational awareness. Always follow official emergency protocols and evacuation orders from local authorities. Do not rely solely on this system for life-safety decisions.

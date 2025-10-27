@@ -1,0 +1,342 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Card,
+  CardHeader,
+  CardContent,
+  Typography,
+  Box,
+  Chip,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  IconButton,
+  Tooltip,
+  Alert,
+  LinearProgress,
+  Badge,
+  Grid,
+  Avatar,
+  Divider,
+} from '@mui/material';
+import {
+  Satellite,
+  LocalFireDepartment,
+  Refresh,
+  Visibility,
+  Map,
+  ThermostatAuto,
+  Schedule,
+  Warning,
+  CheckCircle,
+  LocationOn,
+} from '@mui/icons-material';
+
+interface FIRMSDetection {
+  id: string;
+  latitude: number;
+  longitude: number;
+  brightness: number;
+  confidence: number;
+  acquisitionDate: string;
+  acquisitionTime: string;
+  satellite: 'MODIS' | 'VIIRS';
+  instrument: string;
+  daynight: 'D' | 'N';
+  type: number;
+  frp: number; // Fire Radiative Power
+  location: string;
+  timeDetected: Date;
+}
+
+const NASAFIRMSWidget: React.FC = () => {
+  const [detections, setDetections] = useState<FIRMSDetection[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+
+  useEffect(() => {
+    // Mock NASA FIRMS data - in real implementation, this would fetch from NASA FIRMS API
+    const mockDetections: FIRMSDetection[] = [
+      {
+        id: '1',
+        latitude: 34.2608,
+        longitude: -118.4661,
+        brightness: 325.8,
+        confidence: 95,
+        acquisitionDate: '2024-09-14',
+        acquisitionTime: '2145',
+        satellite: 'MODIS',
+        instrument: 'MODIS/Terra',
+        daynight: 'N',
+        type: 0,
+        frp: 42.5,
+        location: 'Saddleridge, CA',
+        timeDetected: new Date(Date.now() - 300000)
+      },
+      {
+        id: '2',
+        latitude: 34.0522,
+        longitude: -118.2437,
+        brightness: 298.2,
+        confidence: 87,
+        acquisitionDate: '2024-09-14',
+        acquisitionTime: '2130',
+        satellite: 'VIIRS',
+        instrument: 'VIIRS/NPP',
+        daynight: 'N',
+        type: 0,
+        frp: 28.9,
+        location: 'Los Angeles, CA',
+        timeDetected: new Date(Date.now() - 600000)
+      },
+      {
+        id: '3',
+        latitude: 34.4208,
+        longitude: -118.6982,
+        brightness: 312.1,
+        confidence: 91,
+        acquisitionDate: '2024-09-14',
+        acquisitionTime: '2100',
+        satellite: 'MODIS',
+        instrument: 'MODIS/Aqua',
+        daynight: 'N',
+        type: 0,
+        frp: 35.2,
+        location: 'Santa Clarita, CA',
+        timeDetected: new Date(Date.now() - 900000)
+      }
+    ];
+
+    setDetections(mockDetections);
+
+    // Simulate periodic updates
+    const interval = setInterval(() => {
+      setLastUpdate(new Date());
+      // In real implementation, this would fetch new data from NASA FIRMS API
+    }, 60000); // Update every minute
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const refreshData = async () => {
+    setLoading(true);
+    // Simulate API call delay
+    setTimeout(() => {
+      setLoading(false);
+      setLastUpdate(new Date());
+    }, 2000);
+  };
+
+  const getConfidenceColor = (confidence: number) => {
+    if (confidence >= 90) return 'success';
+    if (confidence >= 70) return 'warning';
+    return 'error';
+  };
+
+  const getSatelliteIcon = (satellite: string) => {
+    return satellite === 'MODIS' ? '[SATELLITE]' : '[SATELLITE_ANTENNA]';
+  };
+
+  const highConfidenceCount = detections.filter(d => d.confidence >= 90).length;
+  const last24Hours = detections.filter(d =>
+    new Date().getTime() - d.timeDetected.getTime() < 86400000
+  ).length;
+
+  return (
+    <Card sx={{ height: '100%' }}>
+      <CardHeader
+        avatar={
+          <Avatar sx={{ bgcolor: 'primary.main' }}>
+            <Satellite />
+          </Avatar>
+        }
+        title="NASA FIRMS Fire Detection"
+        subheader={
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+            <Typography variant="caption" color="text.secondary">
+              Last updated: {lastUpdate.toLocaleTimeString()}
+            </Typography>
+            <Chip
+              label="LIVE"
+              color="success"
+              size="small"
+              sx={{ animation: 'pulse 2s infinite' }}
+            />
+          </Box>
+        }
+        action={
+          <Tooltip title="Refresh Data">
+            <IconButton onClick={refreshData} disabled={loading}>
+              <Refresh />
+            </IconButton>
+          </Tooltip>
+        }
+      />
+
+      <CardContent>
+        {loading && <LinearProgress sx={{ mb: 2 }} />}
+
+        {/* Summary Stats */}
+        <Grid container spacing={2} sx={{ mb: 2 }}>
+          <Grid item xs={4}>
+            <Box sx={{ textAlign: 'center' }}>
+              <Typography variant="h4" color="error">
+                {detections.length}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Active Hotspots
+              </Typography>
+            </Box>
+          </Grid>
+          <Grid item xs={4}>
+            <Box sx={{ textAlign: 'center' }}>
+              <Badge badgeContent={highConfidenceCount} color="error">
+                <Typography variant="h4" color="success.main">
+                  {highConfidenceCount}
+                </Typography>
+              </Badge>
+              <Typography variant="caption" color="text.secondary" display="block">
+                High Confidence
+              </Typography>
+            </Box>
+          </Grid>
+          <Grid item xs={4}>
+            <Box sx={{ textAlign: 'center' }}>
+              <Typography variant="h4" color="info.main">
+                {last24Hours}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Last 24h
+              </Typography>
+            </Box>
+          </Grid>
+        </Grid>
+
+        <Divider sx={{ my: 2 }} />
+
+        {/* Recent Detections */}
+        <Typography variant="h6" gutterBottom>
+          <LocalFireDepartment sx={{ mr: 1, verticalAlign: 'middle' }} />
+          Recent Detections
+        </Typography>
+
+        <TableContainer sx={{ maxHeight: 300 }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Location</TableCell>
+                <TableCell>Satellite</TableCell>
+                <TableCell>Confidence</TableCell>
+                <TableCell>FRP</TableCell>
+                <TableCell>Time</TableCell>
+                <TableCell>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {detections.map((detection) => (
+                <TableRow key={detection.id} hover>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <LocationOn fontSize="small" color="action" />
+                      <Box>
+                        <Typography variant="body2" fontWeight="medium">
+                          {detection.location}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {detection.latitude.toFixed(4)}, {detection.longitude.toFixed(4)}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </TableCell>
+
+                  <TableCell>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography variant="body2">
+                        {getSatelliteIcon(detection.satellite)}
+                      </Typography>
+                      <Box>
+                        <Typography variant="body2">
+                          {detection.satellite}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {detection.instrument}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </TableCell>
+
+                  <TableCell>
+                    <Chip
+                      label={`${detection.confidence}%`}
+                      color={getConfidenceColor(detection.confidence) as any}
+                      size="small"
+                      icon={detection.confidence >= 90 ? <CheckCircle /> : <Warning />}
+                    />
+                  </TableCell>
+
+                  <TableCell>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <ThermostatAuto fontSize="small" color="error" />
+                      <Typography variant="body2">
+                        {detection.frp.toFixed(1)} MW
+                      </Typography>
+                    </Box>
+                  </TableCell>
+
+                  <TableCell>
+                    <Box>
+                      <Typography variant="body2">
+                        {detection.acquisitionTime.substring(0, 2)}:{detection.acquisitionTime.substring(2)}
+                        {detection.daynight === 'D' ? ' [SUN]' : ' 🌙'}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {detection.timeDetected.toLocaleDateString()}
+                      </Typography>
+                    </Box>
+                  </TableCell>
+
+                  <TableCell>
+                    <Tooltip title="View on Map">
+                      <IconButton size="small">
+                        <Map />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Details">
+                      <IconButton size="small">
+                        <Visibility />
+                      </IconButton>
+                    </Tooltip>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+
+        {detections.length === 0 && (
+          <Box sx={{ textAlign: 'center', py: 3 }}>
+            <CheckCircle sx={{ fontSize: 48, color: 'success.main', mb: 1 }} />
+            <Typography variant="h6" color="success.main">
+              No Active Fire Detections
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              MODIS and VIIRS satellites show clear conditions
+            </Typography>
+          </Box>
+        )}
+
+        <Alert severity="info" sx={{ mt: 2 }}>
+          <Typography variant="body2">
+            <strong>NASA FIRMS:</strong> Fire Information for Resource Management System provides
+            near real-time active fire data from MODIS and VIIRS instruments aboard Terra, Aqua,
+            and Suomi NPP satellites.
+          </Typography>
+        </Alert>
+      </CardContent>
+    </Card>
+  );
+};
+
+export default NASAFIRMSWidget;

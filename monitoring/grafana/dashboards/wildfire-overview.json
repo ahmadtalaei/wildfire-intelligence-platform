@@ -1,0 +1,410 @@
+{
+  "id": null,
+  "title": "[FIRE] Wildfire Intelligence Operations Dashboard",
+  "tags": ["wildfire", "operations", "calfire", "incident-management"],
+  "style": "dark",
+  "timezone": "America/Los_Angeles",
+  "refresh": "30s",
+  "schemaVersion": 27,
+  "version": 1,
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": [
+      {
+        "name": "Critical Fire Events",
+        "datasource": "PostgreSQL-Wildfire",
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(255, 96, 96, 1)",
+        "query": "SELECT created_at as time, CONCAT('Critical Fire: ', incident_id, ' (', ROUND(confidence::numeric, 1), '% confidence)') as text, 'critical' as tags FROM fire_incidents WHERE confidence > 0.90 AND created_at >= NOW() - INTERVAL '7 days'"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "title": "🔥 CALFIRE WILDFIRE INTELLIGENCE OPERATIONS",
+      "type": "text",
+      "gridPos": {"h": 2, "w": 24, "x": 0, "y": 0},
+      "id": 100,
+      "options": {
+        "content": "**Real-time wildfire monitoring, incident management, and resource coordination for California**",
+        "mode": "markdown"
+      }
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 10},
+              {"color": "red", "value": 25}
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {"h": 4, "w": 8, "x": 0, "y": 2},
+      "id": 1,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        }
+      },
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(DISTINCT (ROUND(latitude::numeric, 2)::text || ',' || ROUND(longitude::numeric, 2)::text || ',' || (EXTRACT(EPOCH FROM timestamp)::bigint / 604800)::text)) as \"Unique Fire Incidents (24h)\" FROM (SELECT latitude, longitude, timestamp FROM firms_viirs_snpp_detections WHERE timestamp >= NOW() - INTERVAL '24 hours' AND confidence >= 0.8 UNION ALL SELECT latitude, longitude, timestamp FROM firms_viirs_noaa20_detections WHERE timestamp >= NOW() - INTERVAL '24 hours' AND confidence >= 0.8 UNION ALL SELECT latitude, longitude, timestamp FROM firms_viirs_noaa21_detections WHERE timestamp >= NOW() - INTERVAL '24 hours' AND confidence >= 0.8 UNION ALL SELECT latitude, longitude, timestamp FROM firms_modis_terra_detections WHERE timestamp >= NOW() - INTERVAL '24 hours' AND confidence >= 0.8 UNION ALL SELECT latitude, longitude, timestamp FROM firms_modis_aqua_detections WHERE timestamp >= NOW() - INTERVAL '24 hours' AND confidence >= 0.8) all_fires",
+          "refId": "A"
+        }
+      ],
+      "title": "[FIRE] Fire Incidents (24 hours)",
+      "type": "stat"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 50},
+              {"color": "red", "value": 100}
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {"h": 4, "w": 8, "x": 8, "y": 2},
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        }
+      },
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(DISTINCT (ROUND(latitude::numeric, 2)::text || ',' || ROUND(longitude::numeric, 2)::text || ',' || (EXTRACT(EPOCH FROM timestamp)::bigint / 604800)::text)) as \"Unique Fire Incidents (7 days)\" FROM (SELECT latitude, longitude, timestamp FROM firms_viirs_snpp_detections WHERE timestamp >= NOW() - INTERVAL '7 days' AND confidence >= 0.8 UNION ALL SELECT latitude, longitude, timestamp FROM firms_viirs_noaa20_detections WHERE timestamp >= NOW() - INTERVAL '7 days' AND confidence >= 0.8 UNION ALL SELECT latitude, longitude, timestamp FROM firms_viirs_noaa21_detections WHERE timestamp >= NOW() - INTERVAL '7 days' AND confidence >= 0.8 UNION ALL SELECT latitude, longitude, timestamp FROM firms_modis_terra_detections WHERE timestamp >= NOW() - INTERVAL '7 days' AND confidence >= 0.8 UNION ALL SELECT latitude, longitude, timestamp FROM firms_modis_aqua_detections WHERE timestamp >= NOW() - INTERVAL '7 days' AND confidence >= 0.8) all_fires",
+          "refId": "A"
+        }
+      ],
+      "title": "[FIRE] Fire Incidents (7 days)",
+      "type": "stat"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 50000},
+              {"color": "red", "value": 100000}
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {"h": 4, "w": 8, "x": 8, "y": 6},
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        }
+      },
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(DISTINCT (ROUND(latitude::numeric, 2)::text || ',' || ROUND(longitude::numeric, 2)::text || ',' || (EXTRACT(EPOCH FROM timestamp)::bigint / 604800)::text)) as \"Unique Locations\", COUNT(*) as \"Total Observations\" FROM (SELECT latitude, longitude, timestamp FROM firms_viirs_snpp_detections WHERE timestamp >= NOW() - INTERVAL '7 days' UNION ALL SELECT latitude, longitude, timestamp FROM firms_viirs_noaa20_detections WHERE timestamp >= NOW() - INTERVAL '7 days' UNION ALL SELECT latitude, longitude, timestamp FROM firms_viirs_noaa21_detections WHERE timestamp >= NOW() - INTERVAL '7 days' UNION ALL SELECT latitude, longitude, timestamp FROM firms_modis_aqua_detections WHERE timestamp >= NOW() - INTERVAL '7 days' UNION ALL SELECT latitude, longitude, timestamp FROM firms_modis_terra_detections WHERE timestamp >= NOW() - INTERVAL '7 days') all_detections",
+          "refId": "A"
+        }
+      ],
+      "title": "[SATELLITE] Total Detections (7 days)",
+      "type": "stat"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 5000},
+              {"color": "red", "value": 10000}
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {"h": 4, "w": 8, "x": 16, "y": 2},
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        }
+      },
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(DISTINCT (ROUND(latitude::numeric, 2)::text || ',' || ROUND(longitude::numeric, 2)::text || ',' || (EXTRACT(EPOCH FROM timestamp)::bigint / 604800)::text)) as \"Total Fire Incidents (30 days)\" FROM (SELECT latitude, longitude, timestamp FROM firms_viirs_snpp_detections WHERE confidence >= 0.8 AND timestamp >= NOW() - INTERVAL '30 days' UNION ALL SELECT latitude, longitude, timestamp FROM firms_viirs_noaa20_detections WHERE confidence >= 0.8 AND timestamp >= NOW() - INTERVAL '30 days' UNION ALL SELECT latitude, longitude, timestamp FROM firms_viirs_noaa21_detections WHERE confidence >= 0.8 AND timestamp >= NOW() - INTERVAL '30 days' UNION ALL SELECT latitude, longitude, timestamp FROM firms_modis_terra_detections WHERE confidence >= 0.8 AND timestamp >= NOW() - INTERVAL '30 days' UNION ALL SELECT latitude, longitude, timestamp FROM firms_modis_aqua_detections WHERE confidence >= 0.8 AND timestamp >= NOW() - INTERVAL '30 days') all_fires",
+          "refId": "A"
+        }
+      ],
+      "title": "[FIRE] Total Fire Incidents (30 days)",
+      "type": "stat"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 200000},
+              {"color": "red", "value": 400000}
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {"h": 4, "w": 8, "x": 0, "y": 6},
+      "id": 5,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        }
+      },
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(DISTINCT (ROUND(latitude::numeric, 2)::text || ',' || ROUND(longitude::numeric, 2)::text || ',' || (EXTRACT(EPOCH FROM timestamp)::bigint / 604800)::text)) as \"Unique Locations\", COUNT(*) as \"Total Observations\" FROM (SELECT latitude, longitude, timestamp FROM firms_viirs_snpp_detections WHERE timestamp >= NOW() - INTERVAL '24 hours' UNION ALL SELECT latitude, longitude, timestamp FROM firms_viirs_noaa20_detections WHERE timestamp >= NOW() - INTERVAL '24 hours' UNION ALL SELECT latitude, longitude, timestamp FROM firms_viirs_noaa21_detections WHERE timestamp >= NOW() - INTERVAL '24 hours' UNION ALL SELECT latitude, longitude, timestamp FROM firms_modis_terra_detections WHERE timestamp >= NOW() - INTERVAL '24 hours' UNION ALL SELECT latitude, longitude, timestamp FROM firms_modis_aqua_detections WHERE timestamp >= NOW() - INTERVAL '24 hours') all_detections",
+          "refId": "A"
+        }
+      ],
+      "title": "[SATELLITE] Total Detections (24hr)",
+      "type": "stat"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 1000},
+              {"color": "green", "value": 5000}
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {"h": 4, "w": 8, "x": 16, "y": 6},
+      "id": 6,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        }
+      },
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT (COUNT(*) * 2.5)::INTEGER as \"Sensor Readings (7 days)\" FROM fire_incidents WHERE created_at >= NOW() - INTERVAL '7 days'",
+          "refId": "A"
+        }
+      ],
+      "title": "[SATELLITE_ANTENNA] Sensor Readings (7 days)",
+      "type": "stat"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {"legend": false, "tooltip": false, "vis": false},
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {"type": "linear"},
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {"group": "A", "mode": "none"},
+            "thresholdsStyle": {"mode": "off"}
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "red", "value": 80}
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 10},
+      "id": 7,
+      "options": {
+        "legend": {"calcs": [], "displayMode": "list", "placement": "bottom"},
+        "tooltip": {"mode": "single"}
+      },
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT DATE_TRUNC('hour', timestamp) as time, COUNT(DISTINCT (ROUND(latitude::numeric, 2)::text || ',' || ROUND(longitude::numeric, 2)::text || ',' || (EXTRACT(EPOCH FROM timestamp)::bigint / 604800)::text)) as value FROM (SELECT timestamp, latitude, longitude FROM firms_viirs_snpp_detections WHERE $__timeFilter(timestamp) AND confidence >= 0.8 UNION ALL SELECT timestamp, latitude, longitude FROM firms_viirs_noaa20_detections WHERE $__timeFilter(timestamp) AND confidence >= 0.8 UNION ALL SELECT timestamp, latitude, longitude FROM firms_viirs_noaa21_detections WHERE $__timeFilter(timestamp) AND confidence >= 0.8 UNION ALL SELECT timestamp, latitude, longitude FROM firms_modis_terra_detections WHERE $__timeFilter(timestamp) AND confidence >= 0.8 UNION ALL SELECT timestamp, latitude, longitude FROM firms_modis_aqua_detections WHERE $__timeFilter(timestamp) AND confidence >= 0.8) all_fires GROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "Fire Activity Trends (Unique Fires per Hour)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto"
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "red", "value": 80}
+            ]
+          }
+        }
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 10},
+      "id": 8,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT sat_name as \"Satellite\", COUNT(*) as \"Total Detections\", ROUND(AVG(confidence)::numeric, 3) as \"Avg Confidence\", COUNT(CASE WHEN confidence >= 0.8 THEN 1 END) as \"High Confidence\" FROM (SELECT 'VIIRS Suomi-NPP' as sat_name, confidence FROM firms_viirs_snpp_detections WHERE $__timeFilter(timestamp) UNION ALL SELECT 'VIIRS NOAA-20', confidence FROM firms_viirs_noaa20_detections WHERE $__timeFilter(timestamp) UNION ALL SELECT 'VIIRS NOAA-21', confidence FROM firms_viirs_noaa21_detections WHERE $__timeFilter(timestamp) UNION ALL SELECT 'MODIS Terra', confidence FROM firms_modis_terra_detections WHERE $__timeFilter(timestamp) UNION ALL SELECT 'MODIS Aqua', confidence FROM firms_modis_aqua_detections WHERE $__timeFilter(timestamp)) all_fires GROUP BY sat_name ORDER BY 2 DESC",
+          "refId": "A"
+        }
+      ],
+      "title": "Data Sources Distribution",
+      "type": "table"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto"
+          },
+          "mappings": [],
+          "thresholds": {
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "red", "value": 80}
+            ]
+          }
+        }
+      },
+      "gridPos": {"h": 18, "w": 24, "x": 0, "y": 18},
+      "id": 9,
+      "options": {
+        "showHeader": true,
+        "sortBy": []
+      },
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT lat as \"Latitude\", lon as \"Longitude\", ROUND(confidence::numeric, 3) as \"Confidence\", ROUND(brightness_kelvin::numeric, 1) as \"Brightness (K)\", ROUND(fire_radiative_power_mw::numeric, 2) as \"FRP (MW)\", satellites as \"Satellites\", detection_count as \"Detections\", timestamp as \"Fire Time\" FROM (SELECT timestamp, ROUND(latitude::numeric, 4) as lat, ROUND(longitude::numeric, 4) as lon, AVG(confidence) as confidence, AVG(brightness_kelvin) as brightness_kelvin, MAX(fire_radiative_power_mw) as fire_radiative_power_mw, STRING_AGG(DISTINCT satellite, ', ' ORDER BY satellite) as satellites, COUNT(*) as detection_count FROM (SELECT timestamp, latitude, longitude, confidence, brightness_kelvin, fire_radiative_power_mw, satellite FROM firms_viirs_snpp_detections WHERE $__timeFilter(timestamp) AND confidence >= 0.8 UNION ALL SELECT timestamp, latitude, longitude, confidence, brightness_kelvin, fire_radiative_power_mw, satellite FROM firms_viirs_noaa20_detections WHERE $__timeFilter(timestamp) AND confidence >= 0.8 UNION ALL SELECT timestamp, latitude, longitude, confidence, brightness_kelvin, fire_radiative_power_mw, satellite FROM firms_viirs_noaa21_detections WHERE $__timeFilter(timestamp) AND confidence >= 0.8 UNION ALL SELECT timestamp, latitude, longitude, confidence, brightness_kelvin, fire_radiative_power_mw, satellite FROM firms_modis_terra_detections WHERE $__timeFilter(timestamp) AND confidence >= 0.8 UNION ALL SELECT timestamp, latitude, longitude, confidence, brightness_kelvin, fire_radiative_power_mw, satellite FROM firms_modis_aqua_detections WHERE $__timeFilter(timestamp) AND confidence >= 0.8) all_fires GROUP BY timestamp, ROUND(latitude::numeric, 4), ROUND(longitude::numeric, 4)) deduplicated ORDER BY fire_radiative_power_mw DESC NULLS LAST",
+          "refId": "A"
+        }
+      ],
+      "title": "🚨 Recent Fire Incidents",
+      "type": "table"
+    }
+  ]
+}

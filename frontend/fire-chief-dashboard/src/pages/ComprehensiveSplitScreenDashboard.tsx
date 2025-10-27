@@ -1,0 +1,386 @@
+import React, { useEffect, useState } from 'react';
+import {
+  Grid,
+  Paper,
+  Typography,
+  Box,
+  Card,
+  CardContent,
+  IconButton,
+  Chip,
+  CircularProgress,
+} from '@mui/material';
+import {
+  Refresh as RefreshIcon,
+  TrendingUp,
+  LocalFireDepartment,
+  Warning,
+  People,
+  Speed,
+  Landscape,
+} from '@mui/icons-material';
+import { useDispatch, useSelector } from 'react-redux';
+
+import { RootState } from '../store/store';
+import { fetchDashboardData } from '../store/slices/dashboardSlice';
+import MetricCard from '../components/Dashboard/MetricCard';
+import WindyMapEmbed from '../components/WildfireMap/WindyMapEmbed';
+import FireDataMap from '../components/WildfireMap/FireDataMap';
+import ActiveIncidentsList from '../components/Dashboard/ActiveIncidentsList';
+import WeatherWidget from '../components/Dashboard/WeatherWidget';
+import ResourceStatus from '../components/Dashboard/ResourceStatus';
+import RecentAlerts from '../components/Dashboard/RecentAlerts';
+import NASAFIRMSWidget from '../components/Dashboard/NASAFIRMSWidget';
+import RAWSWeatherWidget from '../components/Dashboard/RAWSWeatherWidget';
+import HistoricalFirePerimeters from '../components/Dashboard/HistoricalFirePerimeters';
+import IoTSensorNetwork from '../components/Dashboard/IoTSensorNetwork';
+import LandsatVegetationIndex from '../components/Dashboard/LandsatVegetationIndex';
+import CALFIRERiskModel from '../components/Dashboard/CALFIRERiskModel';
+import { formatDistanceToNow } from 'date-fns';
+import FireSatWidget from '../components/Dashboard/FireSatWidget';
+
+const ComprehensiveSplitScreenDashboard: React.FC = () => {
+  const dispatch = useDispatch();
+  const {
+    metrics,
+    fireRiskData,
+    activeIncidents,
+    weatherData,
+    resourceStatus,
+    isLoading,
+    error,
+    lastUpdated
+  } = useSelector((state: RootState) => state.dashboard);
+
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [selectedLayers, setSelectedLayers] = useState({
+    windVectors: true,
+    temperature: true,
+    humidity: false,
+    precipitation: false,
+    pressure: false,
+    cloudCover: false,
+    cape: false,
+    visibility: false,
+    snow: false,
+    waves: false,
+    lightning: false,
+    airQuality: false
+  });
+
+  useEffect(() => {
+    dispatch(fetchDashboardData() as any);
+  }, [dispatch]);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+
+    if (autoRefresh) {
+      interval = setInterval(() => {
+        dispatch(fetchDashboardData() as any);
+        setLastRefresh(new Date());
+      }, 30000); // Refresh every 30 seconds
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [dispatch, autoRefresh]);
+
+  const handleRefresh = () => {
+    dispatch(fetchDashboardData() as any);
+    setLastRefresh(new Date());
+  };
+
+  const handleLayerToggle = (layer: keyof typeof selectedLayers) => {
+    setSelectedLayers(prev => ({
+      ...prev,
+      [layer]: !prev[layer]
+    }));
+  };
+
+  const getRiskLevelColor = (level: string) => {
+    switch (level.toLowerCase()) {
+      case 'low': return 'success';
+      case 'medium': return 'warning';
+      case 'high': return 'error';
+      case 'extreme': return 'error';
+      default: return 'default';
+    }
+  };
+
+  if (isLoading && !metrics) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
+        <CircularProgress size={60} />
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ flexGrow: 1, p: 3 }}>
+      {/* Header */}
+      <Box display="flex" justifyContent="between" alignItems="center" mb={3}>
+        <Typography variant="h4" component="h1" gutterBottom>
+          [SATELLITE] Fire Chief Intelligence Dashboard
+        </Typography>
+        <Box display="flex" alignItems="center" gap={2}>
+          {lastUpdated && (
+            <Typography variant="body2" color="textSecondary">
+              Last updated: {formatDistanceToNow(new Date(lastUpdated), { addSuffix: true })}
+            </Typography>
+          )}
+          <IconButton onClick={handleRefresh} disabled={isLoading}>
+            <RefreshIcon />
+          </IconButton>
+        </Box>
+      </Box>
+
+      {/* Key Metrics */}
+      <Grid container spacing={3} sx={{ mb: 3 }}>
+        <Grid item xs={12} sm={6} md={2}>
+          <MetricCard
+            title="Active Incidents"
+            value={metrics?.activeIncidents || 0}
+            icon={<LocalFireDepartment />}
+            color="error"
+            trend="up"
+            trendValue="+2"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={2}>
+          <MetricCard
+            title="High Risk Areas"
+            value={metrics?.highRiskAreas || 0}
+            icon={<Warning />}
+            color="warning"
+            trend="up"
+            trendValue="+15%"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={2}>
+          <MetricCard
+            title="Resources Deployed"
+            value={metrics?.resourcesDeployed || 0}
+            icon={<People />}
+            color="info"
+            trend="down"
+            trendValue="-8%"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={2}>
+          <MetricCard
+            title="Acres Burned Today"
+            value={metrics?.acresBurnedToday || 0}
+            icon={<Landscape />}
+            color="error"
+            unit="acres"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={2}>
+          <MetricCard
+            title="Avg Response Time"
+            value={metrics?.averageResponseTime || 0}
+            icon={<Speed />}
+            color="success"
+            unit="min"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={2}>
+          <MetricCard
+            title="Total This Year"
+            value={metrics?.totalIncidents || 0}
+            icon={<TrendingUp />}
+            color="info"
+          />
+        </Grid>
+      </Grid>
+
+      <Grid container spacing={3}>
+        {/* Split-Screen Map Layout */}
+        <Grid item xs={12}>
+          <Paper sx={{ p: 0, height: 'calc(100vh - 300px)', overflow: 'hidden' }}>
+            <Box sx={{ p: 2, borderBottom: '1px solid #e0e0e0' }}>
+              <Typography variant="h6">
+                🌍 Split-Screen Intelligence Platform
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Left: Worldwide Weather (Windy.com) * Right: Nationwide Fire Data (NASA FIRMS)
+              </Typography>
+            </Box>
+            <Box sx={{ height: 'calc(100% - 80px)', display: 'flex' }}>
+              {/* Split-Screen Maps Container */}
+              {/* Split-Screen Maps using working components */}
+              <Box sx={{ height: '100%', display: 'flex' }}>
+                {/* Left Half - Global Weather Map */}
+                <Box sx={{ width: '50%', borderRight: '2px solid #e0e0e0' }}>
+                  <Box sx={{ p: 1, borderBottom: '1px solid #e0e0e0', background: '#f5f5f5' }}>
+                    <Typography variant="subtitle2" sx={{ color: '#333', fontWeight: 'bold' }}>
+                      🌍 Global Weather Data (Windy.com)
+                    </Typography>
+                  </Box>
+                  <Box sx={{ height: 'calc(100% - 40px)' }}>
+                    <WindyMapEmbed
+                      mapCenter={[30.0, 0.0]} // Global view
+                      activeFires={[]} // No fire data on weather map
+                      selectedLayers={selectedLayers}
+                      onLayerToggle={handleLayerToggle}
+                    />
+                  </Box>
+                </Box>
+
+                {/* Right Half - Fire Data Map */}
+                <Box sx={{ width: '50%' }}>
+                  <Box sx={{ p: 1, borderBottom: '1px solid #e0e0e0', background: '#fff5f5' }}>
+                    <Typography variant="subtitle2" sx={{ color: '#333', fontWeight: 'bold' }}>
+                      [FIRE] Nationwide Fire Intelligence (NASA FIRMS)
+                    </Typography>
+                  </Box>
+                  <Box sx={{ height: 'calc(100% - 40px)' }}>
+                    <FireDataMap
+                      activeFires={activeIncidents || []}
+                    />
+                  </Box>
+                </Box>
+              </Box>
+            </Box>
+          </Paper>
+        </Grid>
+
+        {/* Real-time Data Sources */}
+        <Grid item xs={12} lg={6}>
+          <NASAFIRMSWidget />
+        </Grid>
+
+        <Grid item xs={12} lg={6}>
+          <RAWSWeatherWidget />
+        </Grid>
+
+        <Grid item xs={12} lg={6}>
+          <FireSatWidget />
+        </Grid>
+
+        {/* IoT Sensor Network */}
+        <Grid item xs={12} lg={6}>
+          <IoTSensorNetwork />
+        </Grid>
+
+        {/* Weather Widget */}
+        <Grid item xs={12} lg={6}>
+          <WeatherWidget />
+        </Grid>
+
+        {/* CAL FIRE Proprietary Risk Model */}
+        <Grid item xs={12} lg={8}>
+          <CALFIRERiskModel />
+        </Grid>
+
+        {/* Landsat Vegetation Analysis */}
+        <Grid item xs={12} lg={4}>
+          <LandsatVegetationIndex />
+        </Grid>
+
+        {/* Historical Fire Data */}
+        <Grid item xs={12}>
+          <HistoricalFirePerimeters />
+        </Grid>
+
+        {/* Active Incidents */}
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Active Incidents
+            </Typography>
+            <ActiveIncidentsList />
+          </Paper>
+        </Grid>
+
+        {/* Resource Status */}
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Resource Deployment Status
+            </Typography>
+            <ResourceStatus />
+          </Paper>
+        </Grid>
+
+        {/* Recent Alerts */}
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Recent Alerts
+            </Typography>
+            <RecentAlerts />
+          </Paper>
+        </Grid>
+
+        {/* Fire Risk Summary */}
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Current Fire Risk Assessment
+            </Typography>
+            <Grid container spacing={2}>
+              {fireRiskData.slice(0, 6).map((risk) => (
+                <Grid item xs={12} sm={6} md={4} lg={2} key={risk.id}>
+                  <Card variant="outlined">
+                    <CardContent sx={{ textAlign: 'center', py: 2 }}>
+                      <Typography variant="body2" color="textSecondary" gutterBottom>
+                        {risk.location.name}
+                      </Typography>
+                      <Chip
+                        label={risk.riskLevel.toUpperCase()}
+                        color={getRiskLevelColor(risk.riskLevel) as any}
+                        size="small"
+                        sx={{ mb: 1 }}
+                      />
+                      <Typography variant="h6" component="div">
+                        {(risk.riskScore * 100).toFixed(0)}%
+                      </Typography>
+                      <Typography variant="caption" color="textSecondary">
+                        Risk Score
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          </Paper>
+        </Grid>
+      </Grid>
+
+      {/* Status Footer */}
+      <Box sx={{
+        mt: 3,
+        p: 2,
+        background: 'rgba(0,0,0,0.05)',
+        borderRadius: 2,
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center'
+      }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+          <Typography variant="body2">
+            🕒 Last Updated: {lastRefresh.toLocaleTimeString()}
+          </Typography>
+          <Typography variant="body2">
+            🌍 Windy Weather: LIVE
+          </Typography>
+          <Typography variant="body2">
+            [SATELLITE] NASA FIRMS: STREAMING
+          </Typography>
+          <Typography variant="body2">
+            [SATELLITE_ANTENNA] Data Feeds: OPERATIONAL
+          </Typography>
+        </Box>
+        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+          Fire Chief Intelligence Platform * NASA FIRMS + Windy.com
+        </Typography>
+      </Box>
+    </Box>
+  );
+};
+
+export default ComprehensiveSplitScreenDashboard;

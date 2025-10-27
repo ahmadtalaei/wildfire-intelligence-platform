@@ -1,0 +1,260 @@
+# Kafka Partition Monitoring Configuration for Wildfire Intelligence Platform
+# Optimized for tracking partition performance with 10K-20K events/sec throughput
+
+# This configuration defines Prometheus metrics for monitoring:
+# - Partition lag per consumer group
+# - Message throughput per partition
+# - Partition disk usage
+# - Consumer group rebalancing
+# - Geographic distribution balance
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Kafka JMX Exporter metrics
+scrape_configs:
+  - job_name: 'kafka-broker'
+    static_configs:
+      - targets: ['kafka:9092']
+    metrics_path: /metrics
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'kafka-broker-1'
+
+  - job_name: 'kafka-partition-metrics'
+    static_configs:
+      - targets: ['kafka-exporter:9308']
+    metric_relabel_configs:
+      # Focus on partition-specific metrics
+      - source_labels: [__name__]
+        regex: 'kafka_topic_partition_.*'
+        action: keep
+
+# Alert Rules for Partition Monitoring
+rule_files:
+  - 'kafka_partition_alerts.yml'
+
+# Recording Rules for Aggregated Metrics
+groups:
+  - name: partition_performance
+    interval: 30s
+    rules:
+      # Messages per second by topic
+      - record: topic:kafka_messages_per_second
+        expr: |
+          sum by (topic) (
+            rate(kafka_topic_partition_current_offset[1m])
+          )
+
+      # Average partition lag by topic
+      - record: topic:kafka_partition_lag_avg
+        expr: |
+          avg by (topic, consumer_group) (
+            kafka_consumer_group_lag
+          )
+
+      # Max partition lag (identify hot partitions)
+      - record: topic:kafka_partition_lag_max
+        expr: |
+          max by (topic, consumer_group) (
+            kafka_consumer_group_lag
+          )
+
+      # Partition count by topic
+      - record: topic:kafka_partition_count
+        expr: |
+          count by (topic) (
+            kafka_topic_partition_replicas
+          )
+
+      # High-volume topic identification (>1000 msg/sec)
+      - record: topic:kafka_high_volume
+        expr: |
+          topic:kafka_messages_per_second > 1000
+
+      # Critical alert topic monitoring (<100ms target)
+      - record: critical:kafka_processing_latency
+        expr: |
+          histogram_quantile(0.95,
+            sum by (topic, le) (
+              rate(kafka_producer_request_latency_ms_bucket{topic=~"wildfire-critical-.*"}[1m])
+            )
+          )
+
+      # IoT sensor throughput (target: 16 partitions handling load)
+      - record: iot:kafka_partition_throughput
+        expr: |
+          sum by (partition) (
+            rate(kafka_topic_partition_current_offset{topic="wildfire-iot-sensors"}[1m])
+          )
+
+      # Weather data distribution across 12 partitions
+      - record: weather:kafka_partition_balance
+        expr: |
+          stddev by (topic) (
+            sum by (partition, topic) (
+              rate(kafka_topic_partition_current_offset{topic="wildfire-weather-data"}[1m])
+            )
+          )
+
+      # Satellite image processing (binary topics)
+      - record: satellite:kafka_large_message_rate
+        expr: |
+          sum by (topic) (
+            rate(kafka_producer_record_size_bytes_sum{topic=~"wildfire-satellite-imagery-.*"}[1m])
+          ) / 1048576  # Convert to MB/sec
+
+      # Geographic partition distribution (custom metric)
+      - record: geo:kafka_partition_skew
+        expr: |
+          (max by (topic) (kafka_topic_partition_current_offset) -
+           min by (topic) (kafka_topic_partition_current_offset)) /
+          avg by (topic) (kafka_topic_partition_current_offset)
+
+# Specific metrics for optimized partition configuration
+partition_metrics:
+  critical_alerts:
+    partitions: 3
+    target_latency_ms: 100
+    alert_threshold_ms: 150
+
+  iot_sensors:
+    partitions: 16
+    target_throughput: 10000  # events/sec
+    max_lag_messages: 1000
+
+  weather_data:
+    partitions: 12
+    target_throughput: 5000
+    max_lag_messages: 5000
+
+  nasa_firms:
+    partitions: 6
+    burst_threshold: 10000  # messages per 15-min window
+    max_lag_messages: 10000
+
+  satellite_imagery_binary:
+    partitions: 10
+    max_message_size_mb: 20
+    target_throughput_mbps: 100
+
+  weather_bulk:
+    partitions: 8
+    compression_ratio_target: 0.3  # 70% compression with zstd level 6
+
+# Dashboard Panels Configuration
+dashboards:
+  - name: "Kafka Partition Performance"
+    panels:
+      - title: "Partition Throughput by Topic"
+        query: |
+          sum by (topic, partition) (
+            rate(kafka_topic_partition_current_offset[1m])
+          )
+        visualization: heatmap
+
+      - title: "Consumer Lag by Partition"
+        query: |
+          kafka_consumer_group_lag
+        visualization: graph
+        alert_threshold: 10000
+
+      - title: "Critical Alert Latency (p95)"
+        query: |
+          histogram_quantile(0.95,
+            sum by (le) (
+              rate(kafka_producer_request_latency_ms_bucket{topic="wildfire-critical-alerts"}[1m])
+            )
+          )
+        visualization: gauge
+        target: 100
+        warning: 80
+        critical: 150
+
+      - title: "IoT Sensor Partition Distribution"
+        query: |
+          sum by (partition) (
+            rate(kafka_topic_partition_current_offset{topic="wildfire-iot-sensors"}[1m])
+          )
+        visualization: bar_chart
+
+      - title: "Geographic Data Distribution"
+        query: |
+          sum by (partition, region) (
+            increase(kafka_messages_by_region[5m])
+          )
+        visualization: geo_map
+
+      - title: "Partition Imbalance Score"
+        query: |
+          geo:kafka_partition_skew
+        visualization: gauge
+        target: 0.2  # 20% skew acceptable
+        warning: 0.3
+        critical: 0.5
+
+      - title: "Binary Image Throughput (MB/s)"
+        query: |
+          satellite:kafka_large_message_rate
+        visualization: graph
+
+      - title: "Total Active Partitions"
+        query: |
+          sum(kafka_topic_partitions)
+        visualization: stat
+        target: 85  # Optimal for single broker
+
+      - title: "Hot Partition Detection"
+        query: |
+          topk(5,
+            sum by (topic, partition) (
+              rate(kafka_topic_partition_current_offset[1m])
+            )
+          )
+        visualization: table
+
+      - title: "Compression Effectiveness"
+        query: |
+          1 - (kafka_producer_compression_rate_bytes /
+               kafka_producer_record_size_bytes)
+        visualization: gauge
+        unit: percent
+
+# Alerting Rules
+alerts:
+  - name: HighPartitionLag
+    expr: kafka_consumer_group_lag > 10000
+    for: 5m
+    annotations:
+      summary: "High lag on partition {{ $labels.partition }} of {{ $labels.topic }}"
+      description: "Consumer lag is {{ $value }} messages"
+
+  - name: PartitionImbalance
+    expr: geo:kafka_partition_skew > 0.5
+    for: 10m
+    annotations:
+      summary: "Severe partition imbalance for {{ $labels.topic }}"
+      description: "Partition skew is {{ $value }}"
+
+  - name: CriticalAlertLatency
+    expr: critical:kafka_processing_latency > 150
+    for: 1m
+    annotations:
+      summary: "Critical alert latency exceeded threshold"
+      description: "P95 latency is {{ $value }}ms (target: <100ms)"
+
+  - name: ThroughputBelowTarget
+    expr: topic:kafka_messages_per_second{topic="wildfire-iot-sensors"} < 5000
+    for: 5m
+    annotations:
+      summary: "IoT sensor throughput below target"
+      description: "Current: {{ $value }} msg/sec (target: 10,000)"
+
+  - name: SatelliteImageBacklog
+    expr: kafka_consumer_group_lag{topic=~"wildfire-satellite-imagery-.*"} > 100
+    for: 10m
+    annotations:
+      summary: "Satellite image processing backlog"
+      description: "{{ $value }} images pending processing"

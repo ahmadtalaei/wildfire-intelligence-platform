@@ -1,0 +1,172 @@
+# 🛰️ Live Satellite Fire Intelligence Dashboard
+
+## Overview
+
+The Split-Screen Fire Chief Dashboard provides real-time wildfire intelligence by combining **live satellite fire data from NASA FIRMS** with **worldwide weather data from Windy.com** in a professional split-screen layout.
+
+## Features
+
+### 🌍 Left Map: Worldwide Weather (Windy.com)
+- **Global Coverage**: Weather data for the entire world
+- **No Fire Markers**: Weather-only display as requested
+- **Live Weather Layers**:
+  - Wind Speed & Direction (animated)
+  - Temperature
+  - Humidity
+  - Precipitation
+  - Lightning Activity
+  - Atmospheric Pressure
+- **Multiple Map Types**: Satellite, Streets, Terrain
+- **Real-time Animation**: Live weather patterns
+
+### 🛰️ Right Map: Live Fire Intelligence (NASA FIRMS)
+- **Live Satellite Data**: Real-time fire detections from NASA FIRMS
+- **Multi-Satellite Sources**: VIIRS and MODIS satellites
+- **Nationwide Coverage**: Focus on California with nationwide data
+- **Operational Overlays**:
+  - 🔥 Active Fire Markers (live satellite detections)
+  - 🚁 Helicopter Landing Zones
+  - 💧 Water Sources
+  - 🏥 Emergency Services
+  - 📡 Communication Towers
+  - 🌡️ Weather Stations (RAWS)
+  - 🛣️ Evacuation Routes
+  - 🏠 Wildland Urban Interface
+  - 🌿 Fuel Analysis Stations
+
+## Data Sources
+
+### NASA FIRMS (Fire Information for Resource Management System)
+- **VIIRS**: Visible Infrared Imaging Radiometer Suite
+- **MODIS**: Moderate Resolution Imaging Spectroradiometer
+- **Real-time Updates**: Every 2 minutes (NASA updates every 3 hours)
+- **High Confidence**: Only fires with >50% confidence displayed
+- **Live Attributes**: Fire Radiative Power (FRP), brightness, satellite type
+
+### Windy.com
+- **Global Weather Model**: GFS (Global Forecast System)
+- **Live Animation**: Real-time weather patterns
+- **Professional Layers**: Wind, temperature, humidity, precipitation
+- **Worldwide Coverage**: No geographic restrictions
+
+## Technical Implementation
+
+### Live Data Streaming
+```typescript
+// NASA FIRMS API Integration
+const NASA_FIRMS_API_KEY = 'your-api-key';
+const FIRMS_BASE_URL = 'https://firms.modaps.eosdis.nasa.gov/api';
+
+// Automatic refresh every 2 minutes
+const fetchLiveFireData = async () => {
+  const viirs_url = `${FIRMS_BASE_URL}/country/csv/${API_KEY}/VIIRS_SNPP_NRT/USA/1/${dateStr}`;
+  const modis_url = `${FIRMS_BASE_URL}/country/csv/${API_KEY}/MODIS_NRT/USA/1/${dateStr}`;
+
+  // Fetch both satellite sources in parallel
+  const [viirsData, modisData] = await Promise.all([
+    fetch(viirs_url),
+    fetch(modis_url)
+  ]);
+};
+```
+
+### Map Components
+- **SplitScreenMaps.tsx**: Main container component
+- **LiveWindyWeatherMap.tsx**: Global weather display
+- **LiveFireDataMap.tsx**: Fire intelligence with operational overlays
+
+## Getting Started
+
+### 1. Access the Dashboard
+Navigate to: `/split-screen-dashboard`
+
+### 2. Understanding the Display
+- **Left Side**: Global weather (no fires)
+- **Right Side**: Live fire intelligence + operational data
+
+### 3. Using Controls
+- **Weather Controls**: Click visibility icon on left map
+- **Fire Controls**: Click expand icon on right map
+- **Layer Toggles**: Turn overlays on/off independently
+
+### 4. Real-time Updates
+- **Automatic Refresh**: Every 30 seconds
+- **Manual Refresh**: Click refresh button in header
+- **Live Status**: Check footer for data feed status
+
+## Fire Data Attributes
+
+Each live fire marker displays:
+- **Satellite Source**: VIIRS or MODIS
+- **Confidence Level**: 50-100%
+- **Fire Radiative Power**: Measured in Megawatts (MW)
+- **Brightness Temperature**: Kelvin
+- **Detection Time**: UTC timestamp
+- **Day/Night**: Detection conditions
+- **Geographic Coordinates**: Lat/Long
+
+## Operational Overlays
+
+### Emergency Infrastructure
+- **🚁 Helicopter Landing Zones**: Capacity and accessibility status
+- **💧 Water Sources**: Volume capacity for aerial firefighting
+- **🏥 Emergency Services**: Hospitals, fire stations, police
+
+### Communication & Monitoring
+- **📡 Communication Towers**: Critical infrastructure status
+- **🌡️ Weather Stations**: RAWS (Remote Automated Weather Stations)
+- **🌿 Fuel Analysis**: Vegetation monitoring stations
+
+### Risk Assessment
+- **🏠 Wildland Urban Interface**: High-risk residential areas
+- **🛣️ Evacuation Routes**: Real-time road status
+- **🔥 Fire Hazard Zones**: Severity classification
+
+## API Configuration
+
+### NASA FIRMS Setup
+1. Register at: https://firms.modaps.eosdis.nasa.gov/api/
+2. Get your API key
+3. Update `NASA_FIRMS_API_KEY` in SplitScreenMaps.tsx
+4. Ensure CORS is configured for your domain
+
+### Windy.com Integration
+- Uses public embed API
+- No API key required
+- Real-time global weather data
+- Customizable layers and zoom levels
+
+## Troubleshooting
+
+### No Fire Data Showing
+1. Check NASA FIRMS API key
+2. Verify network connectivity
+3. Check browser console for CORS errors
+4. Fallback demo data will display if API fails
+
+### Weather Map Not Loading
+1. Check internet connection
+2. Verify Windy.com embed URL
+3. Disable browser ad blockers if needed
+
+### Performance Issues
+1. Fire markers limited to 50 highest-confidence detections
+2. Clear browser cache
+3. Check available memory (maps are resource-intensive)
+
+## Future Enhancements
+
+- **Real-time WebSocket**: Live fire data streaming
+- **CAL FIRE Integration**: California-specific fire perimeters
+- **IoT Sensors**: Real-time weather station data
+- **Predictive Modeling**: AI-powered fire spread forecasting
+- **Mobile Responsive**: Tablet and phone optimization
+
+## Support
+
+For technical support or feature requests, contact the development team or check the project repository for issues and documentation.
+
+---
+
+**🔥 Built for Fire Chiefs by Fire Chiefs**
+*Powered by NASA FIRMS + Windy.com*

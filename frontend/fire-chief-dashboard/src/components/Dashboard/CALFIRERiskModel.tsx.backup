@@ -1,0 +1,574 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Card,
+  CardHeader,
+  CardContent,
+  Typography,
+  Box,
+  Grid,
+  Avatar,
+  Chip,
+  LinearProgress,
+  IconButton,
+  Tooltip,
+  Alert,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Divider,
+  Paper,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemIcon,
+} from '@mui/material';
+import {
+  Security,
+  Assessment,
+  Refresh,
+  Map,
+  Visibility,
+  TrendingUp,
+  TrendingDown,
+  Warning,
+  LocalFireDepartment,
+  Thermostat,
+  Air,
+  Landscape,
+  Speed,
+  Timeline,
+  CheckCircle,
+  Error,
+  Info,
+} from '@mui/icons-material';
+
+interface RiskAssessment {
+  id: string;
+  zone: string;
+  zoneName: string;
+  latitude: number;
+  longitude: number;
+  overallRisk: number; // 0-100 scale
+  riskLevel: 'Low' | 'Moderate' | 'High' | 'Extreme';
+  confidenceLevel: number; // 0-100 scale
+  lastUpdated: Date;
+  components: {
+    weatherRisk: number;
+    fuelMoistureRisk: number;
+    topographyRisk: number;
+    vegetationRisk: number;
+    historicalRisk: number;
+    humanFactorRisk: number;
+    ignitionProbability: number;
+    spreadPotential: number;
+  };
+  predictions: {
+    next6Hours: number;
+    next12Hours: number;
+    next24Hours: number;
+    next48Hours: number;
+  };
+  alerts: string[];
+  recommendations: string[];
+}
+
+const CALFIRERiskModel: React.FC = () => {
+  const [riskAssessments, setRiskAssessments] = useState<RiskAssessment[]>([]);
+  const [selectedZone, setSelectedZone] = useState<string>('All');
+  const [selectedTimeframe, setSelectedTimeframe] = useState<string>('current');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    // Mock CAL FIRE proprietary risk assessment model data
+    const mockAssessments: RiskAssessment[] = [
+      {
+        id: 'RISK-001',
+        zone: 'LAC-North',
+        zoneName: 'Los Angeles County - Northern Zone',
+        latitude: 34.3774,
+        longitude: -118.0167,
+        overallRisk: 92,
+        riskLevel: 'Extreme',
+        confidenceLevel: 94,
+        lastUpdated: new Date(Date.now() - 300000), // 5 minutes ago
+        components: {
+          weatherRisk: 95, // Red flag conditions
+          fuelMoistureRisk: 88, // Critical low fuel moisture
+          topographyRisk: 75, // Steep terrain, canyons
+          vegetationRisk: 90, // Dry chaparral, stressed vegetation
+          historicalRisk: 85, // High historical fire activity
+          humanFactorRisk: 70, // Population density, infrastructure
+          ignitionProbability: 89,
+          spreadPotential: 96
+        },
+        predictions: {
+          next6Hours: 94,
+          next12Hours: 91,
+          next24Hours: 87,
+          next48Hours: 82
+        },
+        alerts: [
+          'Extreme fire weather conditions detected',
+          'Fuel moisture below critical threshold (4%)',
+          'Santa Ana wind event in progress',
+          'Multiple ignition sources present'
+        ],
+        recommendations: [
+          'Pre-position additional resources in high-risk areas',
+          'Consider pre-evacuation notices for vulnerable communities',
+          'Increase patrol frequency on high-risk corridors',
+          'Activate regional coordination center'
+        ]
+      },
+      {
+        id: 'RISK-002',
+        zone: 'VEN-Central',
+        zoneName: 'Ventura County - Central Zone',
+        latitude: 34.2694,
+        longitude: -118.7317,
+        overallRisk: 76,
+        riskLevel: 'High',
+        confidenceLevel: 88,
+        lastUpdated: new Date(Date.now() - 180000),
+        components: {
+          weatherRisk: 78,
+          fuelMoistureRisk: 82,
+          topographyRisk: 65,
+          vegetationRisk: 74,
+          historicalRisk: 71,
+          humanFactorRisk: 68,
+          ignitionProbability: 72,
+          spreadPotential: 81
+        },
+        predictions: {
+          next6Hours: 78,
+          next12Hours: 74,
+          next24Hours: 69,
+          next48Hours: 65
+        },
+        alerts: [
+          'Elevated fire weather conditions',
+          'Low relative humidity (<15%)',
+          'Moderate wind speeds increasing'
+        ],
+        recommendations: [
+          'Increase staffing at key stations',
+          'Monitor weather conditions closely',
+          'Prepare evacuation routes'
+        ]
+      },
+      {
+        id: 'RISK-003',
+        zone: 'ORA-East',
+        zoneName: 'Orange County - Eastern Zone',
+        latitude: 33.7107,
+        longitude: -117.5318,
+        overallRisk: 58,
+        riskLevel: 'Moderate',
+        confidenceLevel: 91,
+        lastUpdated: new Date(Date.now() - 240000),
+        components: {
+          weatherRisk: 52,
+          fuelMoistureRisk: 61,
+          topographyRisk: 68,
+          vegetationRisk: 55,
+          historicalRisk: 62,
+          humanFactorRisk: 45,
+          ignitionProbability: 48,
+          spreadPotential: 64
+        },
+        predictions: {
+          next6Hours: 59,
+          next12Hours: 62,
+          next24Hours: 65,
+          next48Hours: 68
+        },
+        alerts: [
+          'Increasing fire weather conditions expected'
+        ],
+        recommendations: [
+          'Standard fire weather preparedness',
+          'Monitor conditions for changes'
+        ]
+      }
+    ];
+
+    setRiskAssessments(mockAssessments);
+
+    // Simulate model updates every few minutes
+    const interval = setInterval(() => {
+      setRiskAssessments(prev => prev.map(assessment => ({
+        ...assessment,
+        overallRisk: Math.max(0, Math.min(100, assessment.overallRisk + (Math.random() - 0.5) * 5)),
+        lastUpdated: new Date(),
+        components: {
+          ...assessment.components,
+          weatherRisk: Math.max(0, Math.min(100, assessment.components.weatherRisk + (Math.random() - 0.5) * 3)),
+          fuelMoistureRisk: Math.max(0, Math.min(100, assessment.components.fuelMoistureRisk + (Math.random() - 0.5) * 2))
+        }
+      })));
+    }, 120000); // Update every 2 minutes
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const getRiskColor = (risk: number) => {
+    if (risk >= 80) return 'error';
+    if (risk >= 60) return 'warning';
+    if (risk >= 40) return 'info';
+    return 'success';
+  };
+
+  const getRiskLevelColor = (level: string) => {
+    switch (level) {
+      case 'Extreme': return 'error';
+      case 'High': return 'warning';
+      case 'Moderate': return 'info';
+      case 'Low': return 'success';
+      default: return 'default';
+    }
+  };
+
+  const getConfidenceIcon = (confidence: number) => {
+    if (confidence >= 90) return <CheckCircle color="success" />;
+    if (confidence >= 70) return <Info color="info" />;
+    return <Warning color="warning" />;
+  };
+
+  const refreshModel = async () => {
+    setLoading(true);
+    setTimeout(() => {
+      setLoading(false);
+      setRiskAssessments(prev => prev.map(assessment => ({
+        ...assessment,
+        lastUpdated: new Date()
+      })));
+    }, 3000);
+  };
+
+  const filteredAssessments = riskAssessments.filter(assessment => {
+    return selectedZone === 'All' || assessment.zone === selectedZone;
+  });
+
+  const extremeRiskZones = riskAssessments.filter(a => a.riskLevel === 'Extreme').length;
+  const highRiskZones = riskAssessments.filter(a => a.riskLevel === 'High').length;
+  const avgRisk = riskAssessments.reduce((sum, a) => sum + a.overallRisk, 0) / riskAssessments.length;
+  const avgConfidence = riskAssessments.reduce((sum, a) => sum + a.confidenceLevel, 0) / riskAssessments.length;
+
+  return (
+    <Card sx={{ height: '100%' }}>
+      <CardHeader
+        avatar={
+          <Avatar sx={{ bgcolor: 'error.main' }}>
+            <Security />
+          </Avatar>
+        }
+        title="CAL FIRE Risk Assessment Model"
+        subheader={
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+            <Typography variant="caption" color="text.secondary">
+              Proprietary Multi-Factor Fire Risk Analysis
+            </Typography>
+            <Chip
+              label="CONFIDENTIAL"
+              color="error"
+              size="small"
+              variant="outlined"
+            />
+          </Box>
+        }
+        action={
+          <Tooltip title="Refresh Risk Model">
+            <IconButton onClick={refreshModel} disabled={loading}>
+              <Refresh />
+            </IconButton>
+          </Tooltip>
+        }
+      />
+
+      <CardContent>
+        {loading && (
+          <Box sx={{ mb: 2 }}>
+            <LinearProgress />
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+              Running risk analysis model...
+            </Typography>
+          </Box>
+        )}
+
+        {/* Critical Risk Alerts */}
+        {extremeRiskZones > 0 && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            <Typography variant="body2">
+              <strong>EXTREME RISK ALERT:</strong> {extremeRiskZones} zone{extremeRiskZones > 1 ? 's' : ''}
+              {' '}showing extreme fire risk conditions. Immediate action required.
+            </Typography>
+          </Alert>
+        )}
+
+        {/* Model Performance Summary */}
+        <Grid container spacing={2} sx={{ mb: 3 }}>
+          <Grid item xs={3}>
+            <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'error.light', borderRadius: 1, color: 'white' }}>
+              <Assessment sx={{ fontSize: 24, mb: 0.5 }} />
+              <Typography variant="h6">{avgRisk.toFixed(0)}%</Typography>
+              <Typography variant="caption">Avg Risk Score</Typography>
+            </Box>
+          </Grid>
+          <Grid item xs={3}>
+            <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'warning.light', borderRadius: 1, color: 'white' }}>
+              <LocalFireDepartment sx={{ fontSize: 24, mb: 0.5 }} />
+              <Typography variant="h6">{extremeRiskZones}</Typography>
+              <Typography variant="caption">Extreme Risk</Typography>
+            </Box>
+          </Grid>
+          <Grid item xs={3}>
+            <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'info.light', borderRadius: 1, color: 'white' }}>
+              <CheckCircle sx={{ fontSize: 24, mb: 0.5 }} />
+              <Typography variant="h6">{avgConfidence.toFixed(0)}%</Typography>
+              <Typography variant="caption">Model Confidence</Typography>
+            </Box>
+          </Grid>
+          <Grid item xs={3}>
+            <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'success.light', borderRadius: 1, color: 'white' }}>
+              <Speed sx={{ fontSize: 24, mb: 0.5 }} />
+              <Typography variant="h6">
+                {Math.round((Date.now() - Math.min(...riskAssessments.map(a => a.lastUpdated.getTime()))) / 60000)}
+              </Typography>
+              <Typography variant="caption">Minutes Ago</Typography>
+            </Box>
+          </Grid>
+        </Grid>
+
+        {/* Zone Selection */}
+        <Grid container spacing={2} sx={{ mb: 2 }}>
+          <Grid item xs={6}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Risk Zone</InputLabel>
+              <Select
+                value={selectedZone}
+                onChange={(e) => setSelectedZone(e.target.value)}
+                label="Risk Zone"
+              >
+                <MenuItem value="All">All Zones</MenuItem>
+                <MenuItem value="LAC-North">LA County North</MenuItem>
+                <MenuItem value="VEN-Central">Ventura Central</MenuItem>
+                <MenuItem value="ORA-East">Orange County East</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={6}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Timeframe</InputLabel>
+              <Select
+                value={selectedTimeframe}
+                onChange={(e) => setSelectedTimeframe(e.target.value)}
+                label="Timeframe"
+              >
+                <MenuItem value="current">Current Conditions</MenuItem>
+                <MenuItem value="6hour">6-Hour Forecast</MenuItem>
+                <MenuItem value="24hour">24-Hour Forecast</MenuItem>
+                <MenuItem value="48hour">48-Hour Forecast</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+        </Grid>
+
+        <Divider sx={{ my: 2 }} />
+
+        {/* Risk Assessment Details */}
+        <Typography variant="h6" gutterBottom>
+          <Security sx={{ mr: 1, verticalAlign: 'middle' }} />
+          Zone Risk Analysis
+        </Typography>
+
+        <TableContainer sx={{ maxHeight: 400 }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Zone</TableCell>
+                <TableCell>Risk Score</TableCell>
+                <TableCell>Risk Factors</TableCell>
+                <TableCell>Predictions</TableCell>
+                <TableCell>Confidence</TableCell>
+                <TableCell>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filteredAssessments.map((assessment) => (
+                <TableRow key={assessment.id} hover>
+                  <TableCell>
+                    <Box>
+                      <Typography variant="body2" fontWeight="medium">
+                        {assessment.zoneName}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Zone: {assessment.zone}
+                      </Typography>
+                      <br />
+                      <Typography variant="caption" color="text.secondary">
+                        Updated: {Math.round((Date.now() - assessment.lastUpdated.getTime()) / 60000)}m ago
+                      </Typography>
+                    </Box>
+                  </TableCell>
+
+                  <TableCell>
+                    <Box>
+                      <Chip
+                        label={`${assessment.overallRisk}%`}
+                        color={getRiskColor(assessment.overallRisk) as any}
+                        size="small"
+                        sx={{ mb: 0.5 }}
+                      />
+                      <br />
+                      <Chip
+                        label={assessment.riskLevel}
+                        color={getRiskLevelColor(assessment.riskLevel) as any}
+                        size="small"
+                        variant="outlined"
+                      />
+                    </Box>
+                  </TableCell>
+
+                  <TableCell>
+                    <Box>
+                      <Typography variant="caption" display="block">
+                        🌡️ Weather: {assessment.components.weatherRisk}%
+                      </Typography>
+                      <Typography variant="caption" display="block">
+                        💧 Fuel Moisture: {assessment.components.fuelMoistureRisk}%
+                      </Typography>
+                      <Typography variant="caption" display="block">
+                        🏔️ Topography: {assessment.components.topographyRisk}%
+                      </Typography>
+                      <Typography variant="caption" display="block">
+                        🌿 Vegetation: {assessment.components.vegetationRisk}%
+                      </Typography>
+                    </Box>
+                  </TableCell>
+
+                  <TableCell>
+                    <Box>
+                      <Typography variant="caption" display="block">
+                        6h: {assessment.predictions.next6Hours}%
+                      </Typography>
+                      <Typography variant="caption" display="block">
+                        12h: {assessment.predictions.next12Hours}%
+                      </Typography>
+                      <Typography variant="caption" display="block">
+                        24h: {assessment.predictions.next24Hours}%
+                      </Typography>
+                      <Typography variant="caption" display="block">
+                        48h: {assessment.predictions.next48Hours}%
+                      </Typography>
+                    </Box>
+                  </TableCell>
+
+                  <TableCell>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+                      {getConfidenceIcon(assessment.confidenceLevel)}
+                      <Typography variant="body2">
+                        {assessment.confidenceLevel}%
+                      </Typography>
+                    </Box>
+                    <Typography variant="caption" color="text.secondary">
+                      Model Confidence
+                    </Typography>
+                  </TableCell>
+
+                  <TableCell>
+                    <Tooltip title="View Risk Map">
+                      <IconButton size="small">
+                        <Map />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Detailed Analysis">
+                      <IconButton size="small">
+                        <Visibility />
+                      </IconButton>
+                    </Tooltip>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+
+        {/* Model Components Detail */}
+        <Box sx={{ mt: 2 }}>
+          <Typography variant="subtitle2" gutterBottom>
+            Risk Model Components
+          </Typography>
+          <Grid container spacing={1}>
+            <Grid item xs={4}>
+              <Paper sx={{ p: 1, textAlign: 'center' }}>
+                <Thermostat color="error" />
+                <Typography variant="caption" display="block">Weather Risk</Typography>
+                <Typography variant="body2" fontWeight="medium">
+                  Temperature, Humidity, Wind
+                </Typography>
+              </Paper>
+            </Grid>
+            <Grid item xs={4}>
+              <Paper sx={{ p: 1, textAlign: 'center' }}>
+                <Landscape color="warning" />
+                <Typography variant="caption" display="block">Fuel Moisture</Typography>
+                <Typography variant="body2" fontWeight="medium">
+                  Live/Dead Fuel Content
+                </Typography>
+              </Paper>
+            </Grid>
+            <Grid item xs={4}>
+              <Paper sx={{ p: 1, textAlign: 'center' }}>
+                <Timeline color="info" />
+                <Typography variant="caption" display="block">Historical Pattern</Typography>
+                <Typography variant="body2" fontWeight="medium">
+                  Fire History Analysis
+                </Typography>
+              </Paper>
+            </Grid>
+          </Grid>
+        </Box>
+
+        {/* Key Recommendations */}
+        {filteredAssessments.length > 0 && filteredAssessments[0].recommendations.length > 0 && (
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="subtitle2" gutterBottom color="error.main">
+              Priority Recommendations
+            </Typography>
+            <List dense>
+              {filteredAssessments[0].recommendations.slice(0, 3).map((rec, index) => (
+                <ListItem key={index}>
+                  <ListItemIcon>
+                    <Warning color="error" />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={rec}
+                    primaryTypographyProps={{ variant: 'body2' }}
+                  />
+                </ListItem>
+              ))}
+            </List>
+          </Box>
+        )}
+
+        <Alert severity="warning" sx={{ mt: 2 }}>
+          <Typography variant="body2">
+            <strong>Proprietary Model:</strong> CAL FIRE's integrated risk assessment combines
+            weather, fuel conditions, topography, vegetation health, and historical fire patterns
+            using machine learning algorithms trained on 50+ years of California fire data.
+          </Typography>
+        </Alert>
+      </CardContent>
+    </Card>
+  );
+};
+
+export default CALFIRERiskModel;

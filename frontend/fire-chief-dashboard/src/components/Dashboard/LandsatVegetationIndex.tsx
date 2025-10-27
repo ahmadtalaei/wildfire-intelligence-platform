@@ -1,0 +1,474 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Card,
+  CardHeader,
+  CardContent,
+  Typography,
+  Box,
+  Grid,
+  Avatar,
+  Chip,
+  LinearProgress,
+  IconButton,
+  Tooltip,
+  Alert,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Divider,
+} from '@mui/material';
+import {
+  Park,
+  Satellite,
+  Refresh,
+  TrendingDown,
+  TrendingUp,
+  Warning,
+  CheckCircle,
+  Map,
+  Visibility,
+  Timeline,
+  LocalFireDepartment,
+  WaterDrop,
+  Agriculture,
+} from '@mui/icons-material';
+
+interface VegetationData {
+  id: string;
+  location: string;
+  latitude: number;
+  longitude: number;
+  ndvi: number; // Normalized Difference Vegetation Index (-1 to 1)
+  ndmi: number; // Normalized Difference Moisture Index
+  nbr: number; // Normalized Burn Ratio
+  acquisitionDate: string;
+  cloudCover: number;
+  droughtStress: 'None' | 'Mild' | 'Moderate' | 'Severe' | 'Extreme';
+  vegetationHealth: 'Excellent' | 'Good' | 'Fair' | 'Poor' | 'Critical';
+  fireRisk: 'Low' | 'Moderate' | 'High' | 'Extreme';
+  historicalAverage: number;
+  changeFromAverage: number;
+}
+
+const LandsatVegetationIndex: React.FC = () => {
+  const [vegetationData, setVegetationData] = useState<VegetationData[]>([]);
+  const [selectedMetric, setSelectedMetric] = useState<string>('ndvi');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    // Mock Landsat vegetation index data
+    const mockData: VegetationData[] = [
+      {
+        id: 'LAND-001',
+        location: 'Angeles National Forest - North',
+        latitude: 34.3774,
+        longitude: -118.0167,
+        ndvi: 0.25, // Low vegetation (dry/stressed)
+        ndmi: -0.15, // Low moisture
+        nbr: 0.18,
+        acquisitionDate: '2024-09-10',
+        cloudCover: 5,
+        droughtStress: 'Severe',
+        vegetationHealth: 'Poor',
+        fireRisk: 'Extreme',
+        historicalAverage: 0.45,
+        changeFromAverage: -44.4
+      },
+      {
+        id: 'LAND-002',
+        location: 'Los Padres National Forest',
+        latitude: 36.2553,
+        longitude: -121.7143,
+        ndvi: 0.65, // Healthy vegetation
+        ndmi: 0.25, // Good moisture
+        nbr: 0.58,
+        acquisitionDate: '2024-09-10',
+        cloudCover: 12,
+        droughtStress: 'Mild',
+        vegetationHealth: 'Good',
+        fireRisk: 'Moderate',
+        historicalAverage: 0.68,
+        changeFromAverage: -4.4
+      },
+      {
+        id: 'LAND-003',
+        location: 'Simi Hills - Ventura County',
+        latitude: 34.2694,
+        longitude: -118.7317,
+        ndvi: 0.32, // Moderate vegetation stress
+        ndmi: -0.08,
+        nbr: 0.24,
+        acquisitionDate: '2024-09-10',
+        cloudCover: 8,
+        droughtStress: 'Moderate',
+        vegetationHealth: 'Fair',
+        fireRisk: 'High',
+        historicalAverage: 0.48,
+        changeFromAverage: -33.3
+      },
+      {
+        id: 'LAND-004',
+        location: 'Santa Monica Mountains',
+        latitude: 34.0928,
+        longitude: -118.7084,
+        ndvi: 0.28, // Stressed vegetation
+        ndmi: -0.12,
+        nbr: 0.21,
+        acquisitionDate: '2024-09-10',
+        cloudCover: 3,
+        droughtStress: 'Severe',
+        vegetationHealth: 'Poor',
+        fireRisk: 'Extreme',
+        historicalAverage: 0.52,
+        changeFromAverage: -46.2
+      },
+      {
+        id: 'LAND-005',
+        location: 'San Bernardino National Forest',
+        latitude: 34.1839,
+        longitude: -117.3544,
+        ndvi: 0.41, // Moderate vegetation
+        ndmi: 0.05,
+        nbr: 0.38,
+        acquisitionDate: '2024-09-10',
+        cloudCover: 15,
+        droughtStress: 'Moderate',
+        vegetationHealth: 'Fair',
+        fireRisk: 'High',
+        historicalAverage: 0.58,
+        changeFromAverage: -29.3
+      }
+    ];
+
+    setVegetationData(mockData);
+  }, []);
+
+  const getNDVIColor = (ndvi: number) => {
+    if (ndvi >= 0.6) return 'success'; // Healthy vegetation
+    if (ndvi >= 0.4) return 'info';    // Moderate vegetation
+    if (ndvi >= 0.2) return 'warning'; // Stressed vegetation
+    return 'error';                     // Severely stressed/bare soil
+  };
+
+  const getNDVIStatus = (ndvi: number) => {
+    if (ndvi >= 0.6) return 'Dense Vegetation';
+    if (ndvi >= 0.4) return 'Moderate Vegetation';
+    if (ndvi >= 0.2) return 'Sparse Vegetation';
+    return 'Bare Soil/Stressed';
+  };
+
+  const getDroughtColor = (drought: string) => {
+    switch (drought) {
+      case 'None': return 'success';
+      case 'Mild': return 'info';
+      case 'Moderate': return 'warning';
+      case 'Severe': return 'error';
+      case 'Extreme': return 'error';
+      default: return 'default';
+    }
+  };
+
+  const getHealthColor = (health: string) => {
+    switch (health) {
+      case 'Excellent': return 'success';
+      case 'Good': return 'info';
+      case 'Fair': return 'warning';
+      case 'Poor': return 'error';
+      case 'Critical': return 'error';
+      default: return 'default';
+    }
+  };
+
+  const getRiskColor = (risk: string) => {
+    switch (risk) {
+      case 'Low': return 'success';
+      case 'Moderate': return 'info';
+      case 'High': return 'warning';
+      case 'Extreme': return 'error';
+      default: return 'default';
+    }
+  };
+
+  const getChangeIcon = (change: number) => {
+    if (change > 5) return <TrendingUp color="success" />;
+    if (change < -5) return <TrendingDown color="error" />;
+    return <Timeline color="action" />;
+  };
+
+  const refreshData = async () => {
+    setLoading(true);
+    setTimeout(() => {
+      setLoading(false);
+    }, 2000);
+  };
+
+  const extremeRiskAreas = vegetationData.filter(d => d.fireRisk === 'Extreme').length;
+  const severelyStressed = vegetationData.filter(d => d.vegetationHealth === 'Poor' || d.vegetationHealth === 'Critical').length;
+  const avgNDVI = vegetationData.reduce((sum, d) => sum + d.ndvi, 0) / vegetationData.length;
+  const avgChange = vegetationData.reduce((sum, d) => sum + d.changeFromAverage, 0) / vegetationData.length;
+
+  return (
+    <Card sx={{ height: '100%' }}>
+      <CardHeader
+        avatar={
+          <Avatar sx={{ bgcolor: 'success.main' }}>
+            <Park />
+          </Avatar>
+        }
+        title="Landsat Vegetation Index"
+        subheader={
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+            <Typography variant="caption" color="text.secondary">
+              USGS Landsat 8/9 * 16-day cycle
+            </Typography>
+            <Chip
+              label="NDVI Analysis"
+              color="success"
+              size="small"
+            />
+          </Box>
+        }
+        action={
+          <Tooltip title="Refresh Satellite Data">
+            <IconButton onClick={refreshData} disabled={loading}>
+              <Refresh />
+            </IconButton>
+          </Tooltip>
+        }
+      />
+
+      <CardContent>
+        {loading && <LinearProgress sx={{ mb: 2 }} />}
+
+        {/* Critical Vegetation Alerts */}
+        {extremeRiskAreas > 0 && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            <Typography variant="body2">
+              <strong>Extreme Fire Risk:</strong> {extremeRiskAreas} area{extremeRiskAreas > 1 ? 's' : ''}
+              {' '}showing critically low vegetation moisture and high fire risk.
+            </Typography>
+          </Alert>
+        )}
+
+        {severelyStressed > 0 && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            <Typography variant="body2">
+              <strong>Vegetation Stress:</strong> {severelyStressed} area{severelyStressed > 1 ? 's' : ''}
+              {' '}showing poor vegetation health due to drought conditions.
+            </Typography>
+          </Alert>
+        )}
+
+        {/* Summary Statistics */}
+        <Grid container spacing={2} sx={{ mb: 3 }}>
+          <Grid item xs={3}>
+            <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'success.light', borderRadius: 1, color: 'white' }}>
+              <Park sx={{ fontSize: 24, mb: 0.5 }} />
+              <Typography variant="h6">{avgNDVI.toFixed(2)}</Typography>
+              <Typography variant="caption">Avg NDVI</Typography>
+            </Box>
+          </Grid>
+          <Grid item xs={3}>
+            <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'error.light', borderRadius: 1, color: 'white' }}>
+              <LocalFireDepartment sx={{ fontSize: 24, mb: 0.5 }} />
+              <Typography variant="h6">{extremeRiskAreas}</Typography>
+              <Typography variant="caption">Extreme Risk</Typography>
+            </Box>
+          </Grid>
+          <Grid item xs={3}>
+            <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'warning.light', borderRadius: 1, color: 'white' }}>
+              <WaterDrop sx={{ fontSize: 24, mb: 0.5 }} />
+              <Typography variant="h6">{severelyStressed}</Typography>
+              <Typography variant="caption">Drought Stress</Typography>
+            </Box>
+          </Grid>
+          <Grid item xs={3}>
+            <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'info.light', borderRadius: 1, color: 'white' }}>
+              <TrendingDown sx={{ fontSize: 24, mb: 0.5 }} />
+              <Typography variant="h6">{avgChange.toFixed(1)}%</Typography>
+              <Typography variant="caption">vs Historic</Typography>
+            </Box>
+          </Grid>
+        </Grid>
+
+        {/* Metric Selection */}
+        <FormControl size="small" sx={{ minWidth: 200, mb: 2 }}>
+          <InputLabel>Vegetation Metric</InputLabel>
+          <Select
+            value={selectedMetric}
+            onChange={(e) => setSelectedMetric(e.target.value)}
+            label="Vegetation Metric"
+          >
+            <MenuItem value="ndvi">NDVI - Vegetation Health</MenuItem>
+            <MenuItem value="ndmi">NDMI - Moisture Index</MenuItem>
+            <MenuItem value="nbr">NBR - Burn Ratio</MenuItem>
+          </Select>
+        </FormControl>
+
+        <Divider sx={{ my: 2 }} />
+
+        {/* Vegetation Analysis Table */}
+        <Typography variant="h6" gutterBottom>
+          <Satellite sx={{ mr: 1, verticalAlign: 'middle' }} />
+          Vegetation Analysis by Area
+        </Typography>
+
+        <TableContainer sx={{ maxHeight: 350 }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Location</TableCell>
+                <TableCell>NDVI Status</TableCell>
+                <TableCell>Vegetation Health</TableCell>
+                <TableCell>Drought Stress</TableCell>
+                <TableCell>Fire Risk</TableCell>
+                <TableCell>Change</TableCell>
+                <TableCell>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {vegetationData.map((area) => (
+                <TableRow key={area.id} hover>
+                  <TableCell>
+                    <Box>
+                      <Typography variant="body2" fontWeight="medium">
+                        {area.location}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {area.latitude.toFixed(3)}, {area.longitude.toFixed(3)}
+                      </Typography>
+                      <br />
+                      <Typography variant="caption" color="text.secondary">
+                        Updated: {new Date(area.acquisitionDate).toLocaleDateString()}
+                      </Typography>
+                    </Box>
+                  </TableCell>
+
+                  <TableCell>
+                    <Box>
+                      <Chip
+                        label={`${area.ndvi.toFixed(2)}`}
+                        color={getNDVIColor(area.ndvi) as any}
+                        size="small"
+                        sx={{ mb: 0.5 }}
+                      />
+                      <Typography variant="caption" display="block">
+                        {getNDVIStatus(area.ndvi)}
+                      </Typography>
+                    </Box>
+                  </TableCell>
+
+                  <TableCell>
+                    <Chip
+                      label={area.vegetationHealth}
+                      color={getHealthColor(area.vegetationHealth) as any}
+                      size="small"
+                      icon={area.vegetationHealth === 'Poor' || area.vegetationHealth === 'Critical' ?
+                        <Warning /> : <CheckCircle />}
+                    />
+                  </TableCell>
+
+                  <TableCell>
+                    <Chip
+                      label={area.droughtStress}
+                      color={getDroughtColor(area.droughtStress) as any}
+                      size="small"
+                    />
+                  </TableCell>
+
+                  <TableCell>
+                    <Chip
+                      label={area.fireRisk.toUpperCase()}
+                      color={getRiskColor(area.fireRisk) as any}
+                      size="small"
+                      icon={area.fireRisk === 'Extreme' ? <LocalFireDepartment /> : undefined}
+                    />
+                  </TableCell>
+
+                  <TableCell>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      {getChangeIcon(area.changeFromAverage)}
+                      <Typography
+                        variant="body2"
+                        color={area.changeFromAverage < -20 ? 'error.main' :
+                               area.changeFromAverage < -10 ? 'warning.main' : 'text.primary'}
+                      >
+                        {area.changeFromAverage > 0 ? '+' : ''}{area.changeFromAverage.toFixed(1)}%
+                      </Typography>
+                    </Box>
+                    <Typography variant="caption" color="text.secondary">
+                      vs 10yr avg
+                    </Typography>
+                  </TableCell>
+
+                  <TableCell>
+                    <Tooltip title="View on Map">
+                      <IconButton size="small">
+                        <Map />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Historical Trends">
+                      <IconButton size="small">
+                        <Visibility />
+                      </IconButton>
+                    </Tooltip>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+
+        {/* Additional Metrics */}
+        <Box sx={{ mt: 2 }}>
+          <Typography variant="subtitle2" gutterBottom>
+            Additional Vegetation Metrics
+          </Typography>
+          <Grid container spacing={1}>
+            <Grid item xs={4}>
+              <Box sx={{ textAlign: 'center', p: 1, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                <Typography variant="caption" color="text.secondary">NDMI Average</Typography>
+                <Typography variant="body2" fontWeight="medium">
+                  {(vegetationData.reduce((sum, d) => sum + d.ndmi, 0) / vegetationData.length).toFixed(2)}
+                </Typography>
+              </Box>
+            </Grid>
+            <Grid item xs={4}>
+              <Box sx={{ textAlign: 'center', p: 1, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                <Typography variant="caption" color="text.secondary">NBR Average</Typography>
+                <Typography variant="body2" fontWeight="medium">
+                  {(vegetationData.reduce((sum, d) => sum + d.nbr, 0) / vegetationData.length).toFixed(2)}
+                </Typography>
+              </Box>
+            </Grid>
+            <Grid item xs={4}>
+              <Box sx={{ textAlign: 'center', p: 1, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                <Typography variant="caption" color="text.secondary">Cloud Cover</Typography>
+                <Typography variant="body2" fontWeight="medium">
+                  {(vegetationData.reduce((sum, d) => sum + d.cloudCover, 0) / vegetationData.length).toFixed(1)}%
+                </Typography>
+              </Box>
+            </Grid>
+          </Grid>
+        </Box>
+
+        <Alert severity="info" sx={{ mt: 2 }}>
+          <Typography variant="body2">
+            <strong>Landsat Analysis:</strong> NDVI values below 0.3 indicate vegetation stress and increased
+            fire risk. Combined with drought indicators, this data guides resource pre-positioning and
+            evacuation planning.
+          </Typography>
+        </Alert>
+      </CardContent>
+    </Card>
+  );
+};
+
+export default LandsatVegetationIndex;

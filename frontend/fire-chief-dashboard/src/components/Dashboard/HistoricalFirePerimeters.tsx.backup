@@ -1,0 +1,510 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Card,
+  CardHeader,
+  CardContent,
+  Typography,
+  Box,
+  Chip,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  IconButton,
+  Tooltip,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Avatar,
+  Grid,
+  Alert,
+  Slider,
+  Divider,
+  List,
+  ListItem,
+  ListItemText,
+  LinearProgress,
+} from '@mui/material';
+import {
+  Timeline,
+  LocalFireDepartment,
+  Map,
+  Visibility,
+  TrendingUp,
+  CalendarToday,
+  FilterList,
+  Assessment,
+  Landscape,
+  Warning,
+  Info,
+} from '@mui/icons-material';
+
+interface HistoricalFire {
+  id: string;
+  fireName: string;
+  fireYear: number;
+  acres: number;
+  county: string;
+  cause: 'Lightning' | 'Human' | 'Equipment' | 'Arson' | 'Unknown' | 'Campfire' | 'Powerline';
+  startDate: string;
+  containedDate: string;
+  fatalities: number;
+  structuresDestroyed: number;
+  cost: number;
+  incidentType: string;
+  coordinates: { lat: number; lng: number };
+  perimeter?: any; // GeoJSON polygon data
+  severity: 'Low' | 'Moderate' | 'High' | 'Extreme';
+}
+
+const HistoricalFirePerimeters: React.FC = () => {
+  const [fires, setFires] = useState<HistoricalFire[]>([]);
+  const [selectedDecade, setSelectedDecade] = useState<string>('2020s');
+  const [selectedCounty, setSelectedCounty] = useState<string>('All');
+  const [acresRange, setAcresRange] = useState<number[]>([0, 100000]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    // Mock historical fire data from CAL FIRE FRAP database (1878-present)
+    const mockFires: HistoricalFire[] = [
+      {
+        id: 'camp-2018',
+        fireName: 'Camp Fire',
+        fireYear: 2018,
+        acres: 153336,
+        county: 'Butte',
+        cause: 'Equipment',
+        startDate: '2018-11-08',
+        containedDate: '2018-11-25',
+        fatalities: 85,
+        structuresDestroyed: 18804,
+        cost: 16500000000,
+        incidentType: 'Wildfire',
+        coordinates: { lat: 39.8097, lng: -121.6370 },
+        severity: 'Extreme'
+      },
+      {
+        id: 'tubbs-2017',
+        fireName: 'Tubbs Fire',
+        fireYear: 2017,
+        acres: 36807,
+        county: 'Sonoma',
+        cause: 'Equipment',
+        startDate: '2017-10-08',
+        containedDate: '2017-10-31',
+        fatalities: 22,
+        structuresDestroyed: 5636,
+        cost: 1300000000,
+        incidentType: 'Wildfire',
+        coordinates: { lat: 38.5733, lng: -122.5707 },
+        severity: 'Extreme'
+      },
+      {
+        id: 'thomas-2017',
+        fireName: 'Thomas Fire',
+        fireYear: 2017,
+        acres: 281893,
+        county: 'Ventura',
+        cause: 'Equipment',
+        startDate: '2017-12-04',
+        containedDate: '2018-01-12',
+        fatalities: 2,
+        structuresDestroyed: 1063,
+        cost: 2200000000,
+        incidentType: 'Wildfire',
+        coordinates: { lat: 34.4208, lng: -119.1391 },
+        severity: 'Extreme'
+      },
+      {
+        id: 'cedar-2003',
+        fireName: 'Cedar Fire',
+        fireYear: 2003,
+        acres: 273246,
+        county: 'San Diego',
+        cause: 'Human',
+        startDate: '2003-10-25',
+        containedDate: '2003-11-04',
+        fatalities: 15,
+        structuresDestroyed: 2820,
+        cost: 1200000000,
+        incidentType: 'Wildfire',
+        coordinates: { lat: 32.7474, lng: -116.8108 },
+        severity: 'Extreme'
+      },
+      {
+        id: 'rim-2013',
+        fireName: 'Rim Fire',
+        fireYear: 2013,
+        acres: 257314,
+        county: 'Tuolumne',
+        cause: 'Human',
+        startDate: '2013-08-17',
+        containedDate: '2013-10-24',
+        fatalities: 0,
+        structuresDestroyed: 112,
+        cost: 127000000,
+        incidentType: 'Wildfire',
+        coordinates: { lat: 37.8439, lng: -120.0126 },
+        severity: 'High'
+      },
+      {
+        id: 'station-2009',
+        fireName: 'Station Fire',
+        fireYear: 2009,
+        acres: 160577,
+        county: 'Los Angeles',
+        cause: 'Arson',
+        startDate: '2009-08-26',
+        containedDate: '2009-10-16',
+        fatalities: 2,
+        structuresDestroyed: 209,
+        cost: 94000000,
+        incidentType: 'Wildfire',
+        coordinates: { lat: 34.3331, lng: -118.1445 },
+        severity: 'High'
+      },
+      {
+        id: 'griffith-1933',
+        fireName: 'Griffith Park Fire',
+        fireYear: 1933,
+        acres: 47000,
+        county: 'Los Angeles',
+        cause: 'Human',
+        startDate: '1933-10-03',
+        containedDate: '1933-10-10',
+        fatalities: 29,
+        structuresDestroyed: 0,
+        cost: 0,
+        incidentType: 'Wildfire',
+        coordinates: { lat: 34.1364, lng: -118.2941 },
+        severity: 'High'
+      },
+      {
+        id: 'peshtigo-1871',
+        fireName: 'Great Fire of 1871',
+        fireYear: 1871,
+        acres: 3780000,
+        county: 'Multiple',
+        cause: 'Unknown',
+        startDate: '1871-10-08',
+        containedDate: '1871-10-14',
+        fatalities: 1500,
+        structuresDestroyed: 17000,
+        cost: 0,
+        incidentType: 'Wildfire Complex',
+        coordinates: { lat: 45.0536, lng: -87.7453 },
+        severity: 'Extreme'
+      }
+    ];
+
+    setFires(mockFires);
+  }, []);
+
+  const filteredFires = fires.filter(fire => {
+    const decade = Math.floor(fire.fireYear / 10) * 10;
+    const decadeString = `${decade}s`;
+
+    const matchesDecade = selectedDecade === 'All' || decadeString === selectedDecade;
+    const matchesCounty = selectedCounty === 'All' || fire.county === selectedCounty;
+    const matchesAcres = fire.acres >= acresRange[0] && fire.acres <= acresRange[1];
+
+    return matchesDecade && matchesCounty && matchesAcres;
+  });
+
+  const getCauseColor = (cause: string) => {
+    switch (cause) {
+      case 'Lightning': return 'info';
+      case 'Human': return 'warning';
+      case 'Equipment': return 'error';
+      case 'Arson': return 'error';
+      default: return 'default';
+    }
+  };
+
+  const getSeverityColor = (severity: string) => {
+    switch (severity) {
+      case 'Extreme': return 'error';
+      case 'High': return 'warning';
+      case 'Moderate': return 'info';
+      case 'Low': return 'success';
+      default: return 'default';
+    }
+  };
+
+  const totalAcres = filteredFires.reduce((sum, fire) => sum + fire.acres, 0);
+  const totalStructures = filteredFires.reduce((sum, fire) => sum + fire.structuresDestroyed, 0);
+  const totalFatalities = filteredFires.reduce((sum, fire) => sum + fire.fatalities, 0);
+
+  // Historical trends by decade
+  const decadeData = fires.reduce((acc, fire) => {
+    const decade = Math.floor(fire.fireYear / 10) * 10;
+    if (!acc[decade]) {
+      acc[decade] = { count: 0, acres: 0, structures: 0 };
+    }
+    acc[decade].count++;
+    acc[decade].acres += fire.acres;
+    acc[decade].structures += fire.structuresDestroyed;
+    return acc;
+  }, {} as any);
+
+  return (
+    <Card sx={{ height: '100%' }}>
+      <CardHeader
+        avatar={
+          <Avatar sx={{ bgcolor: 'secondary.main' }}>
+            <Timeline />
+          </Avatar>
+        }
+        title="Historical Fire Perimeters"
+        subheader={
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+            <Typography variant="caption" color="text.secondary">
+              CAL FIRE FRAP Database • 1878-Present
+            </Typography>
+            <Chip
+              label={`${fires.length} Records`}
+              color="secondary"
+              size="small"
+            />
+          </Box>
+        }
+        action={
+          <Tooltip title="Filter Historical Data">
+            <IconButton>
+              <FilterList />
+            </IconButton>
+          </Tooltip>
+        }
+      />
+
+      <CardContent>
+        {loading && <LinearProgress sx={{ mb: 2 }} />}
+
+        {/* Filters */}
+        <Grid container spacing={2} sx={{ mb: 3 }}>
+          <Grid item xs={12} md={4}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Time Period</InputLabel>
+              <Select
+                value={selectedDecade}
+                onChange={(e) => setSelectedDecade(e.target.value)}
+                label="Time Period"
+              >
+                <MenuItem value="All">All Years</MenuItem>
+                <MenuItem value="2020s">2020s</MenuItem>
+                <MenuItem value="2010s">2010s</MenuItem>
+                <MenuItem value="2000s">2000s</MenuItem>
+                <MenuItem value="1990s">1990s</MenuItem>
+                <MenuItem value="1980s">1980s</MenuItem>
+                <MenuItem value="1970s">1970s</MenuItem>
+                <MenuItem value="1960s">1960s and Earlier</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+
+          <Grid item xs={12} md={4}>
+            <FormControl fullWidth size="small">
+              <InputLabel>County</InputLabel>
+              <Select
+                value={selectedCounty}
+                onChange={(e) => setSelectedCounty(e.target.value)}
+                label="County"
+              >
+                <MenuItem value="All">All Counties</MenuItem>
+                <MenuItem value="Los Angeles">Los Angeles</MenuItem>
+                <MenuItem value="Riverside">Riverside</MenuItem>
+                <MenuItem value="San Bernardino">San Bernardino</MenuItem>
+                <MenuItem value="Ventura">Ventura</MenuItem>
+                <MenuItem value="Orange">Orange</MenuItem>
+                <MenuItem value="San Diego">San Diego</MenuItem>
+                <MenuItem value="Butte">Butte</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+
+          <Grid item xs={12} md={4}>
+            <Typography variant="body2" gutterBottom>
+              Fire Size (Acres): {acresRange[0].toLocaleString()} - {acresRange[1].toLocaleString()}
+            </Typography>
+            <Slider
+              value={acresRange}
+              onChange={(e, newValue) => setAcresRange(newValue as number[])}
+              valueLabelDisplay="auto"
+              min={0}
+              max={300000}
+              step={1000}
+              size="small"
+            />
+          </Grid>
+        </Grid>
+
+        {/* Summary Statistics */}
+        <Grid container spacing={2} sx={{ mb: 3 }}>
+          <Grid item xs={3}>
+            <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'error.light', borderRadius: 1, color: 'white' }}>
+              <LocalFireDepartment sx={{ fontSize: 24, mb: 0.5 }} />
+              <Typography variant="h6">{filteredFires.length}</Typography>
+              <Typography variant="caption">Major Fires</Typography>
+            </Box>
+          </Grid>
+          <Grid item xs={3}>
+            <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'warning.light', borderRadius: 1, color: 'white' }}>
+              <Landscape sx={{ fontSize: 24, mb: 0.5 }} />
+              <Typography variant="h6">{(totalAcres / 1000000).toFixed(1)}M</Typography>
+              <Typography variant="caption">Acres Burned</Typography>
+            </Box>
+          </Grid>
+          <Grid item xs={3}>
+            <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'info.light', borderRadius: 1, color: 'white' }}>
+              <Warning sx={{ fontSize: 24, mb: 0.5 }} />
+              <Typography variant="h6">{totalStructures.toLocaleString()}</Typography>
+              <Typography variant="caption">Structures Lost</Typography>
+            </Box>
+          </Grid>
+          <Grid item xs={3}>
+            <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'secondary.light', borderRadius: 1, color: 'white' }}>
+              <Assessment sx={{ fontSize: 24, mb: 0.5 }} />
+              <Typography variant="h6">{totalFatalities}</Typography>
+              <Typography variant="caption">Fatalities</Typography>
+            </Box>
+          </Grid>
+        </Grid>
+
+        <Divider sx={{ my: 2 }} />
+
+        {/* Historical Trends */}
+        <Typography variant="h6" gutterBottom>
+          Major Historical Fires
+        </Typography>
+
+        <TableContainer sx={{ maxHeight: 300 }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Fire Name</TableCell>
+                <TableCell>Year</TableCell>
+                <TableCell>Acres</TableCell>
+                <TableCell>County</TableCell>
+                <TableCell>Cause</TableCell>
+                <TableCell>Impact</TableCell>
+                <TableCell>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filteredFires
+                .sort((a, b) => b.acres - a.acres)
+                .slice(0, 10)
+                .map((fire) => (
+                  <TableRow key={fire.id} hover>
+                    <TableCell>
+                      <Box>
+                        <Typography variant="body2" fontWeight="medium">
+                          {fire.fireName}
+                        </Typography>
+                        <Chip
+                          label={fire.severity}
+                          color={getSeverityColor(fire.severity) as any}
+                          size="small"
+                          variant="outlined"
+                        />
+                      </Box>
+                    </TableCell>
+
+                    <TableCell>
+                      <Typography variant="body2">{fire.fireYear}</Typography>
+                    </TableCell>
+
+                    <TableCell>
+                      <Typography variant="body2" fontWeight="medium">
+                        {fire.acres.toLocaleString()}
+                      </Typography>
+                    </TableCell>
+
+                    <TableCell>
+                      <Typography variant="body2">{fire.county}</Typography>
+                    </TableCell>
+
+                    <TableCell>
+                      <Chip
+                        label={fire.cause}
+                        color={getCauseColor(fire.cause) as any}
+                        size="small"
+                      />
+                    </TableCell>
+
+                    <TableCell>
+                      <Box>
+                        {fire.structuresDestroyed > 0 && (
+                          <Typography variant="caption" display="block">
+                            🏠 {fire.structuresDestroyed.toLocaleString()}
+                          </Typography>
+                        )}
+                        {fire.fatalities > 0 && (
+                          <Typography variant="caption" display="block" color="error.main">
+                            💀 {fire.fatalities}
+                          </Typography>
+                        )}
+                        {fire.cost > 0 && (
+                          <Typography variant="caption" display="block">
+                            💰 ${(fire.cost / 1000000).toFixed(0)}M
+                          </Typography>
+                        )}
+                      </Box>
+                    </TableCell>
+
+                    <TableCell>
+                      <Tooltip title="View Perimeter">
+                        <IconButton size="small">
+                          <Map />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Details">
+                        <IconButton size="small">
+                          <Visibility />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+
+        {/* Key Insights */}
+        <Alert severity="info" sx={{ mt: 2 }}>
+          <Typography variant="body2">
+            <strong>Historical Analysis:</strong> California fire data from 1878-present shows increasing
+            fire severity and structure loss in recent decades, with equipment failures and human causes
+            responsible for the most destructive fires.
+          </Typography>
+        </Alert>
+
+        {/* Decade Trends */}
+        <Box sx={{ mt: 2 }}>
+          <Typography variant="subtitle2" gutterBottom>
+            Historical Trends by Decade
+          </Typography>
+          <List dense>
+            {Object.entries(decadeData)
+              .sort(([a], [b]) => parseInt(b) - parseInt(a))
+              .slice(0, 5)
+              .map(([decade, data]: [string, any]) => (
+                <ListItem key={decade}>
+                  <ListItemText
+                    primary={`${decade}s`}
+                    secondary={`${data.count} fires • ${(data.acres / 1000000).toFixed(1)}M acres • ${data.structures.toLocaleString()} structures`}
+                  />
+                  <TrendingUp color={data.count > 50 ? 'error' : 'action'} />
+                </ListItem>
+              ))}
+          </List>
+        </Box>
+      </CardContent>
+    </Card>
+  );
+};
+
+export default HistoricalFirePerimeters;

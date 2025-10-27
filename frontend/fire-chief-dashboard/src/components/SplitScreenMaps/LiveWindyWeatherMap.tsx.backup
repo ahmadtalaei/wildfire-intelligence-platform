@@ -1,0 +1,343 @@
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  Box,
+  Card,
+  Typography,
+  Switch,
+  FormControlLabel,
+  IconButton,
+  Collapse,
+  Button,
+  Alert
+} from '@mui/material';
+import {
+  ExpandMore,
+  ExpandLess,
+  Visibility,
+  VisibilityOff,
+  Air,
+  Thermostat,
+  Opacity,
+  Cloud,
+  FlashOn
+} from '@mui/icons-material';
+
+interface LiveWindyWeatherMapProps {
+  globalView?: boolean;
+}
+
+const LiveWindyWeatherMap: React.FC<LiveWindyWeatherMapProps> = ({ globalView = true }) => {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const [loading, setLoading] = useState(true);
+  const [showControls, setShowControls] = useState(false);
+  const [iframeKey, setIframeKey] = useState(0);
+  const [currentOverlay, setCurrentOverlay] = useState('wind');
+  const [mapType, setMapType] = useState('satellite');
+
+  const [selectedLayers, setSelectedLayers] = useState({
+    wind: true,
+    temperature: false,
+    humidity: false,
+    precipitation: false,
+    pressure: false,
+    cloudCover: false,
+    lightning: false,
+    cape: false
+  });
+
+  // Generate Windy.com embed URL for worldwide weather
+  const generateWindyURL = () => {
+    // Global view coordinates (centered on USA but showing worldwide)
+    const lat = globalView ? 39.8283 : 36.7783; // USA center or California
+    const lng = globalView ? -98.5795 : -119.4179;
+    const zoom = globalView ? '3' : '6'; // Global vs regional zoom
+
+    const params = new URLSearchParams({
+      lat: lat.toString(),
+      lon: lng.toString(),
+      detailLat: lat.toString(),
+      detailLon: lng.toString(),
+      zoom: zoom,
+      level: 'surface',
+      overlay: currentOverlay,
+      product: 'gfs', // Global Forecast System for worldwide coverage
+      menu: '',
+      message: '',
+      marker: 'off',
+      calendar: 'now',
+      pressure: '',
+      type: mapType,
+      location: 'coordinates',
+      detail: 'on',
+      metricWind: 'mph',
+      metricTemp: '°F',
+      metricPressure: 'inHg',
+      metricDistance: 'mi',
+      radarRange: '-1',
+      autoplay: '1', // Enable animation for live feel
+      numDirection: '1',
+      windLabels: '1',
+      isolines: '1',
+      isolinesHd: '1'
+    });
+
+    return `https://embed.windy.com/embed2.html?${params.toString()}`;
+  };
+
+  // Update overlay based on selected layers
+  useEffect(() => {
+    let newOverlay = 'wind';
+
+    if (selectedLayers.temperature) newOverlay = 'temp';
+    else if (selectedLayers.humidity) newOverlay = 'rh';
+    else if (selectedLayers.precipitation) newOverlay = 'rain';
+    else if (selectedLayers.pressure) newOverlay = 'pressure';
+    else if (selectedLayers.cloudCover) newOverlay = 'clouds';
+    else if (selectedLayers.lightning) newOverlay = 'lightning';
+    else if (selectedLayers.cape) newOverlay = 'cape';
+
+    if (newOverlay !== currentOverlay) {
+      setCurrentOverlay(newOverlay);
+      setIframeKey(prev => prev + 1); // Force iframe reload
+    }
+  }, [selectedLayers, currentOverlay]);
+
+  const handleLayerToggle = (layerName: keyof typeof selectedLayers) => {
+    setSelectedLayers(prev => {
+      // Turn off all other layers first
+      const newLayers = Object.keys(prev).reduce((acc, key) => {
+        acc[key as keyof typeof selectedLayers] = false;
+        return acc;
+      }, {} as typeof selectedLayers);
+
+      // Turn on the selected layer
+      newLayers[layerName] = true;
+
+      return newLayers;
+    });
+  };
+
+  const handleMapTypeChange = (newMapType: string) => {
+    setMapType(newMapType);
+    setIframeKey(prev => prev + 1);
+  };
+
+  return (
+    <Box sx={{ position: 'relative', width: '100%', height: '100%' }}>
+      {/* Loading Indicator */}
+      {loading && (
+        <Box sx={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'rgba(0, 0, 0, 0.8)',
+          color: 'white',
+          zIndex: 1000
+        }}>
+          <Typography variant="h6">Loading Global Weather Map...</Typography>
+        </Box>
+      )}
+
+      {/* Windy.com Iframe */}
+      <Box sx={{ width: '100%', height: '100%' }}>
+        <iframe
+          key={iframeKey}
+          src={generateWindyURL()}
+          width="100%"
+          height="100%"
+          frameBorder="0"
+          style={{ border: 'none' }}
+          title="Windy Global Weather Map"
+          onLoad={() => setLoading(false)}
+        />
+      </Box>
+
+      {/* Controls Toggle */}
+      <Box sx={{
+        position: 'absolute',
+        top: 16,
+        left: 16,
+        zIndex: 1001
+      }}>
+        <IconButton
+          onClick={() => setShowControls(!showControls)}
+          sx={{
+            background: 'rgba(33, 150, 243, 0.9)',
+            color: 'white',
+            '&:hover': { background: 'rgba(33, 150, 243, 1)' }
+          }}
+        >
+          {showControls ? <VisibilityOff /> : <Visibility />}
+        </IconButton>
+      </Box>
+
+      {/* Weather Controls Panel */}
+      <Collapse in={showControls}>
+        <Card sx={{
+          position: 'absolute',
+          top: 70,
+          left: 16,
+          padding: 2,
+          background: 'rgba(33, 150, 243, 0.95)',
+          backdropFilter: 'blur(10px)',
+          zIndex: 1000,
+          maxWidth: 280,
+          color: 'white'
+        }}>
+          <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 'bold' }}>
+            🌍 Global Weather Layers
+          </Typography>
+
+          {/* Map Type Selection */}
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Map Type:</Typography>
+          <Box sx={{ mb: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            {['satellite', 'map', 'terrain'].map(type => (
+              <Button
+                key={type}
+                onClick={() => handleMapTypeChange(type)}
+                size="small"
+                variant={mapType === type ? 'contained' : 'outlined'}
+                sx={{
+                  minWidth: '70px',
+                  fontSize: '10px',
+                  color: 'white',
+                  borderColor: 'white',
+                  ...(mapType === type && { backgroundColor: 'rgba(255,255,255,0.3)' })
+                }}
+              >
+                {type.charAt(0).toUpperCase() + type.slice(1)}
+              </Button>
+            ))}
+          </Box>
+
+          {/* Weather Layer Toggles */}
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={selectedLayers.wind}
+                  onChange={() => handleLayerToggle('wind')}
+                  sx={{ '& .MuiSwitch-thumb': { backgroundColor: 'white' } }}
+                />
+              }
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Air sx={{ fontSize: 16 }} />
+                  <Typography variant="body2">Wind Speed & Direction</Typography>
+                </Box>
+              }
+            />
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={selectedLayers.temperature}
+                  onChange={() => handleLayerToggle('temperature')}
+                  sx={{ '& .MuiSwitch-thumb': { backgroundColor: 'white' } }}
+                />
+              }
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Thermostat sx={{ fontSize: 16 }} />
+                  <Typography variant="body2">Temperature</Typography>
+                </Box>
+              }
+            />
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={selectedLayers.humidity}
+                  onChange={() => handleLayerToggle('humidity')}
+                  sx={{ '& .MuiSwitch-thumb': { backgroundColor: 'white' } }}
+                />
+              }
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Opacity sx={{ fontSize: 16 }} />
+                  <Typography variant="body2">Humidity</Typography>
+                </Box>
+              }
+            />
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={selectedLayers.precipitation}
+                  onChange={() => handleLayerToggle('precipitation')}
+                  sx={{ '& .MuiSwitch-thumb': { backgroundColor: 'white' } }}
+                />
+              }
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Cloud sx={{ fontSize: 16 }} />
+                  <Typography variant="body2">Precipitation</Typography>
+                </Box>
+              }
+            />
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={selectedLayers.lightning}
+                  onChange={() => handleLayerToggle('lightning')}
+                  sx={{ '& .MuiSwitch-thumb': { backgroundColor: 'white' } }}
+                />
+              }
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <FlashOn sx={{ fontSize: 16 }} />
+                  <Typography variant="body2">Lightning Activity</Typography>
+                </Box>
+              }
+            />
+          </Box>
+
+          {/* Current Status */}
+          <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid rgba(255,255,255,0.3)' }}>
+            <Typography variant="caption" sx={{ display: 'block', fontWeight: 'bold', mb: 1 }}>
+              ✓ WINDY.COM GLOBAL WEATHER
+            </Typography>
+            <Typography variant="caption" sx={{ display: 'block' }}>
+              Current Layer: {currentOverlay.toUpperCase()}
+            </Typography>
+            <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+              Coverage: Worldwide
+            </Typography>
+            <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+              🚫 NO FIRE DATA (Weather Only)
+            </Typography>
+          </Box>
+        </Card>
+      </Collapse>
+
+      {/* No Fire Data Notice */}
+      <Alert
+        severity="info"
+        sx={{
+          position: 'absolute',
+          bottom: 50,
+          left: 16,
+          zIndex: 1000,
+          background: 'rgba(33, 150, 243, 0.95)',
+          color: 'white',
+          '& .MuiAlert-icon': { color: 'white' }
+        }}
+      >
+        <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+          🌍 Weather-Only Map
+        </Typography>
+        <Typography variant="caption">
+          This map shows global weather conditions only. Fire data is displayed on the right map.
+        </Typography>
+      </Alert>
+    </Box>
+  );
+};
+
+export default LiveWindyWeatherMap;

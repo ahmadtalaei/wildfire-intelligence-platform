@@ -1,0 +1,217 @@
+# [FIRE] California Fire Data Loading Scripts
+
+This directory contains scripts to load historical California fire data into your Wildfire Intelligence Platform.
+
+## 📁 Available Scripts
+
+### 1. **Windows Batch Script** (Recommended for Windows)
+```bash
+# Location
+scripts\data-loading\load_california_fires.bat
+
+# Usage
+cd C:\Users\ahmad\OneDrive\Documents\Calfire\wildfire-intelligence-platform
+scripts\data-loading\load_california_fires.bat
+```
+
+### 2. **Python Script** (Most Flexible)
+```bash
+# Basic usage
+python scripts\data-loading\load_california_fires.py
+
+# Advanced options
+python scripts\data-loading\load_california_fires.py --count 50 --year 2023 --with-weather
+python scripts\data-loading\load_california_fires.py --historical-only
+```
+
+### 3. **PowerShell Script** (Windows Native)
+```powershell
+# Basic usage
+.\scripts\data-loading\Load-CaliforniaFires.ps1
+
+# With parameters
+.\scripts\data-loading\Load-CaliforniaFires.ps1 -Count 30 -Year 2022 -WithWeather
+```
+
+### 4. **CSV Import Script**
+```bash
+# Load from sample CSV
+python scripts\data-loading\load_from_csv.py california_fires_sample.csv
+
+# Load custom CSV
+python scripts\data-loading\load_from_csv.py your_fire_data.csv
+```
+
+## [ROCKET] Quick Start
+
+### Step 1: Ensure Platform is Running
+```bash
+# Make sure your platform is running
+cd C:\Users\ahmad\OneDrive\Documents\Calfire\wildfire-intelligence-platform
+docker-compose -f docker-compose-simple.yml up -d
+
+# Verify it's working
+curl http://localhost:8001/health
+```
+
+### Step 2: Run a Script
+
+**Option A: Windows Batch (Easiest)**
+```cmd
+# Double-click the file or run from command prompt
+scripts\data-loading\load_california_fires.bat
+```
+
+**Option B: Python (Most Features)**
+```bash
+# Install requests if needed
+pip install requests
+
+# Run the script
+python scripts\data-loading\load_california_fires.py
+```
+
+### Step 3: Verify Data Loaded
+```bash
+# Check statistics
+curl http://localhost:8001/api/v1/stats
+
+# View recent fires
+curl http://localhost:8001/api/v1/fires?limit=10
+
+# Open API docs in browser
+http://localhost:8001/docs
+```
+
+## [BAR_CHART] What Data Gets Loaded
+
+### Historical Fires (Real California Incidents)
+- **Camp Fire** (2018) - Deadliest fire in CA history
+- **Thomas Fire** (2017) - Largest fire at the time
+- **Tubbs Fire** (2017) - Devastating Napa County fire
+- **Carr Fire** (2018) - Created fire tornado in Redding
+- **Woolsey Fire** (2018) - Destroyed Malibu
+- **Glass Fire** (2020) - Napa Valley wine country
+- **August Complex** (2020) - Largest fire in CA history
+- **Creek Fire** (2020) - Fresno County megafire
+- **Dixie Fire** (2021) - Second largest fire in CA history
+- **Caldor Fire** (2021) - Threatened Lake Tahoe
+
+### Synthetic Data (For Testing)
+- Realistic fire locations in high-risk California zones
+- Appropriate fire seasons (May-October)
+- Realistic confidence levels (65-98%)
+- Fire temperatures (580-900degK)
+- Multiple counties covered
+
+## [WRENCH] Script Options
+
+### Python Script Options
+```bash
+python load_california_fires.py --help
+
+Options:
+  --count N           Number of synthetic fires (default: 20)
+  --year YYYY         Year for synthetic data (default: 2023)
+  --historical-only   Load only real historical fires
+  --with-weather      Also load weather data for each fire
+```
+
+### PowerShell Script Options
+```powershell
+Get-Help .\Load-CaliforniaFires.ps1
+
+Parameters:
+  -Count              Number of synthetic fires (default: 20)
+  -Year               Year for synthetic data (default: 2023)
+  -HistoricalOnly     Load only historical fires
+  -WithWeather        Also load weather data
+  -ApiBase            API base URL (default: http://localhost:8001)
+```
+
+## [DOCUMENT] CSV Format
+
+To create your own CSV file, use this format:
+
+```csv
+fire_name,year,date,latitude,longitude,confidence,temperature,source,acres_burned,county
+Camp Fire,2018,2018-11-08T06:30:00Z,39.7596,-121.6219,0.95,850.0,Camp_Fire_2018,153336,Butte
+Your Fire,2023,2023-07-15T14:30:00Z,34.0522,-118.2437,0.85,750.0,your_source,1000,Los Angeles
+```
+
+Required columns: `fire_name`, `date`, `latitude`, `longitude`, `confidence`, `temperature`, `source`
+
+## [GLOBE] California Fire Zones Covered
+
+The synthetic data generator covers these high-risk areas:
+
+- **Los Angeles County** - Urban-wildland interface
+- **Orange County** - Coastal and inland fires
+- **Riverside County** - Desert and mountain fires
+- **San Bernardino County** - Largest county by area
+- **Ventura County** - Agricultural and coastal areas
+- **Santa Barbara County** - Wine country and coast
+- **Napa County** - World-famous wine region
+- **Sonoma County** - Multiple fire-prone areas
+- **Butte County** - Site of Camp Fire
+- **Shasta County** - Northern California wilderness
+
+## [MAGNIFYING_GLASS] Troubleshooting
+
+### "Cannot connect to API"
+```bash
+# Check if platform is running
+docker-compose -f docker-compose-simple.yml ps
+
+# Restart if needed
+docker-compose -f docker-compose-simple.yml restart
+```
+
+### "Permission denied" (PowerShell)
+```powershell
+# Enable script execution
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+### Python "Module not found"
+```bash
+# Install required packages
+pip install requests
+```
+
+### "File not found"
+```bash
+# Make sure you're in the right directory
+cd C:\Users\ahmad\OneDrive\Documents\Calfire\wildfire-intelligence-platform
+
+# Check file exists
+dir scripts\data-loading\
+```
+
+## [LINE_CHART] Next Steps
+
+After loading data, you can:
+
+1. **Explore the API**: http://localhost:8001/docs
+2. **Query fire data**: `GET /api/v1/fires`
+3. **Add weather data**: `POST /api/v1/weather`
+4. **View statistics**: `GET /api/v1/stats`
+5. **Build visualizations** using the loaded data
+
+## 🤝 Contributing
+
+To add more fire data:
+
+1. Research actual California fire incidents
+2. Add to the `MAJOR_CALIFORNIA_FIRES` array in scripts
+3. Include realistic coordinates, dates, and fire characteristics
+4. Test with your platform
+
+## [PHONE] Support
+
+If you encounter issues:
+
+1. Check the platform is running: `curl http://localhost:8001/health`
+2. View logs: `docker-compose -f docker-compose-simple.yml logs`
+3. Check API documentation: http://localhost:8001/docs
+4. Verify data loaded: `curl http://localhost:8001/api/v1/stats`

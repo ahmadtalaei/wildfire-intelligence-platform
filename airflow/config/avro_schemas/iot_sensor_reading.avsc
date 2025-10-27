@@ -1,0 +1,89 @@
+{
+  "type": "record",
+  "name": "IoTSensorReading",
+  "namespace": "com.wildfire.streaming",
+  "doc": "Avro schema for IoT sensor readings from air quality sensors, weather stations, and environmental monitors",
+  "fields": [
+    {
+      "name": "reading_id",
+      "type": "string",
+      "doc": "Unique identifier for this sensor reading"
+    },
+    {
+      "name": "sensor_id",
+      "type": "string",
+      "doc": "Sensor device identifier (e.g., CAL-FIRE-SENSOR-2847, PurpleAir sensor ID)"
+    },
+    {
+      "name": "sensor_type",
+      "type": "string",
+      "doc": "Type of sensor (e.g., air_quality, weather_station, soil_moisture)"
+    },
+    {
+      "name": "latitude",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Sensor latitude in decimal degrees (WGS84)"
+    },
+    {
+      "name": "longitude",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Sensor longitude in decimal degrees (WGS84)"
+    },
+    {
+      "name": "timestamp",
+      "type": "long",
+      "logicalType": "timestamp-millis",
+      "doc": "Reading timestamp in milliseconds since Unix epoch (UTC)"
+    },
+    {
+      "name": "pm25",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "PM2.5 particulate matter concentration in μg/m³"
+    },
+    {
+      "name": "pm10",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "PM10 particulate matter concentration in μg/m³"
+    },
+    {
+      "name": "temperature",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Air temperature in degrees Celsius"
+    },
+    {
+      "name": "humidity",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Relative humidity as percentage (0-100)"
+    },
+    {
+      "name": "co2",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Carbon dioxide concentration in ppm (parts per million)"
+    },
+    {
+      "name": "co",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Carbon monoxide concentration in ppm (parts per million)"
+    },
+    {
+      "name": "battery_level",
+      "type": ["null", "int"],
+      "default": null,
+      "doc": "Battery level percentage (0-100) for battery-powered sensors"
+    },
+    {
+      "name": "signal_strength",
+      "type": ["null", "int"],
+      "default": null,
+      "doc": "Signal strength in dBm (typically -30 to -100)"
+    }
+  ]
+}

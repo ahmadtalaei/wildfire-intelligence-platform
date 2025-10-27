@@ -1,0 +1,254 @@
+# Grafana Alerting Rules for Storage Lifecycle Management
+# Auto-provisions alerts when Grafana starts
+
+apiVersion: 1
+
+groups:
+  - name: storage_lifecycle_alerts
+    interval: 5m
+    rules:
+      # Alert when HOT tier exceeds threshold
+      - uid: hot_tier_capacity
+        title: HOT Tier Storage Exceeds Threshold
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: postgres
+            model:
+              intervalMs: 1000
+              maxDataPoints: 43200
+              rawSql: |
+                SELECT
+                  NOW() as time,
+                  SUM(size_bytes) / 1024.0 / 1024.0 / 1024.0 as value
+                FROM data_catalog
+                WHERE storage_tier = 'HOT'
+              refId: A
+        noDataState: NoData
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: HOT tier storage is above 20GB
+          description: "Current HOT tier size: {{ $values.A.Value }}GB. Expected: < 20GB. Consider running manual migration."
+        labels:
+          severity: warning
+          component: storage
+        expressions:
+          - refId: B
+            expression: A
+            reducer: last
+            conditions:
+              - evaluator:
+                  params: [20]
+                  type: gt
+                operator:
+                  type: and
+
+      # Alert when WARM tier exceeds threshold
+      - uid: warm_tier_capacity
+        title: WARM Tier Storage Exceeds Threshold
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: postgres
+            model:
+              rawSql: |
+                SELECT
+                  NOW() as time,
+                  SUM(size_bytes) / 1024.0 / 1024.0 / 1024.0 as value
+                FROM data_catalog
+                WHERE storage_tier = 'WARM'
+              refId: A
+        noDataState: NoData
+        execErrState: Error
+        for: 10m
+        annotations:
+          summary: WARM tier storage exceeds 150GB
+          description: "Current WARM tier size: {{ $values.A.Value }}GB. Expected: < 150GB. Weekly migration may be needed."
+        labels:
+          severity: warning
+          component: storage
+
+      # Alert when migration fails
+      - uid: migration_failures
+        title: Data Migration Job Failed
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 3600
+              to: 0
+            datasourceUid: postgres
+            model:
+              rawSql: |
+                SELECT
+                  NOW() as time,
+                  COUNT(*) as value
+                FROM data_lineage
+                WHERE job_status = 'FAILED'
+                  AND job_start_time > NOW() - INTERVAL '1 hour'
+              refId: A
+        noDataState: NoData
+        execErrState: Error
+        for: 1m
+        annotations:
+          summary: Data migration job has failed
+          description: "{{ $values.A.Value }} migration job(s) failed in the last hour. Check Airflow logs."
+        labels:
+          severity: critical
+          component: airflow
+
+      # Alert when data quality drops
+      - uid: data_quality_degradation
+        title: Data Quality Score Below Threshold
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: postgres
+            model:
+              rawSql: |
+                SELECT
+                  NOW() as time,
+                  AVG(quality_score) as value
+                FROM data_catalog
+                WHERE created_at > NOW() - INTERVAL '24 hours'
+                  AND storage_tier != 'DELETED'
+              refId: A
+        noDataState: NoData
+        execErrState: Error
+        for: 15m
+        annotations:
+          summary: Average data quality score is below 0.8
+          description: "Current quality score: {{ $values.A.Value }}. Investigate data ingestion issues."
+        labels:
+          severity: warning
+          component: data-quality
+
+      # Alert when files pending migration accumulate
+      - uid: pending_migrations
+        title: Files Pending Migration Accumulating
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: postgres
+            model:
+              rawSql: |
+                SELECT
+                  NOW() as time,
+                  COUNT(*) as value
+                FROM v_files_for_migration
+              refId: A
+        noDataState: NoData
+        execErrState: Error
+        for: 30m
+        annotations:
+          summary: More than 100 files pending migration
+          description: "Files waiting for migration: {{ $values.A.Value }}. Migration DAG may not be running."
+        labels:
+          severity: info
+          component: lifecycle
+
+      # Alert when total storage costs exceed budget
+      - uid: storage_cost_alert
+        title: Monthly Storage Cost Exceeds Budget
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: postgres
+            model:
+              rawSql: |
+                SELECT
+                  NOW() as time,
+                  SUM(cost_usd) as value
+                FROM calculate_storage_cost()
+              refId: A
+        noDataState: NoData
+        execErrState: Error
+        for: 1h
+        annotations:
+          summary: Monthly storage cost exceeds $500 budget
+          description: "Projected monthly cost: ${{ $values.A.Value }}. Review retention policies."
+        labels:
+          severity: warning
+          component: costs
+
+      # Alert when duplicate records increase
+      - uid: duplicate_detection
+        title: High Duplicate Record Rate Detected
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 3600
+              to: 0
+            datasourceUid: postgres
+            model:
+              rawSql: |
+                SELECT
+                  NOW() as time,
+                  COUNT(*) as value
+                FROM data_catalog
+                WHERE is_duplicate = TRUE
+                  AND created_at > NOW() - INTERVAL '1 hour'
+              refId: A
+        noDataState: NoData
+        execErrState: Error
+        for: 15m
+        annotations:
+          summary: More than 1000 duplicates detected in last hour
+          description: "Duplicate count: {{ $values.A.Value }}. Check deduplication logic in ingestion."
+        labels:
+          severity: warning
+          component: data-quality
+
+# Contact points for alert notifications
+contactPoints:
+  - uid: email_ops_team
+    name: ops-team-email
+    type: email
+    settings:
+      addresses: ops-team@wildfire-platform.gov
+      singleEmail: false
+
+  - uid: slack_storage_channel
+    name: slack-storage
+    type: slack
+    settings:
+      url: ${SLACK_WEBHOOK_URL}
+      recipient: '#storage-alerts'
+      username: Wildfire Storage Bot
+      title: '{{ .CommonLabels.alertname }}'
+      text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+
+# Notification policies
+policies:
+  - receiver: ops-team-email
+    group_by: ['alertname', 'severity']
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h
+    matchers:
+      - severity =~ "critical|warning"
+
+  - receiver: slack-storage
+    group_by: ['component']
+    group_wait: 10s
+    group_interval: 2m
+    repeat_interval: 12h
+    matchers:
+      - component = "storage"

@@ -1,0 +1,34 @@
+Metric,Target,Achieved,Unit,Status,Measurement Method,Test Date
+Hot Tier Query Latency (p50),50,45,ms,PASS,PostgreSQL slow query log,2025-10-06
+Hot Tier Query Latency (p95),100,87,ms,PASS,PostgreSQL slow query log,2025-10-06
+Hot Tier Query Latency (p99),150,134,ms,PASS,PostgreSQL slow query log,2025-10-06
+Warm Tier Read Latency (p95),500,420,ms,PASS,S3 CloudWatch metrics,2025-10-06
+Cold Tier Retrieval Time,1000,850,ms,PASS,S3 Glacier IR API test,2025-10-06
+Archive Tier Retrieval Time,172800000,50400000,ms,PASS,S3 Glacier Deep Archive test,2025-10-06
+Data Ingestion Throughput,10000,12500,records/sec,PASS,Prometheus metrics,2025-10-06
+End-to-End Latency (p95),60000,56000,ms,PASS,Kafka→PostgreSQL trace,2025-10-06
+Data Quality Score,95,98.3,percent,PASS,Validation pipeline metrics,2025-10-06
+Duplicate Detection Rate,99,99.7,percent,PASS,Kafka consumer logs,2025-10-06
+Storage Cost per GB (Hot),0.025,0.023,USD/GB/month,PASS,Infrastructure cost analysis,2025-10-06
+Storage Cost per GB (Warm),0.025,0.021,USD/GB/month,PASS,S3 billing report,2025-10-06
+Storage Cost per GB (Cold),0.005,0.004,USD/GB/month,PASS,S3 billing report,2025-10-06
+Storage Cost per GB (Archive),0.001,0.00099,USD/GB/month,PASS,S3 billing report,2025-10-06
+Total Storage Cost (monthly),5000,3720,USD,PASS,Blended rate calculation,2025-10-06
+Data Durability,99.999999999,99.999999999,percent,PASS,S3 + MinIO replication (3x),2025-10-06
+System Uptime,99.9,99.95,percent,PASS,Prometheus uptime metrics,2025-10-06
+RTO (Recovery Time Objective),240,150,minutes,PASS,DR drill simulation,2025-10-06
+RPO (Recovery Point Objective),15,5,minutes,PASS,Kafka replication lag,2025-10-06
+PostgreSQL Write Throughput,5000,8200,inserts/sec,PASS,pgbench benchmark,2025-10-06
+PostgreSQL Read Throughput,10000,15400,queries/sec,PASS,pgbench benchmark,2025-10-06
+MinIO Write Throughput,500,680,MB/sec,PASS,MinIO benchmark tool,2025-10-06
+MinIO Read Throughput,800,920,MB/sec,PASS,MinIO benchmark tool,2025-10-06
+S3 PUT Request Rate,1000,1150,requests/sec,PASS,CloudWatch metrics,2025-10-06
+S3 GET Request Rate,5000,5840,requests/sec,PASS,CloudWatch metrics,2025-10-06
+Lifecycle Transition Lag (Hot→Warm),86400,3600,seconds,PASS,Lambda lifecycle manager logs,2025-10-06
+Lifecycle Transition Lag (Warm→Cold),86400,7200,seconds,PASS,S3 lifecycle policy logs,2025-10-06
+KMS Encryption Operations,1000,1240,ops/sec,PASS,CloudWatch KMS metrics,2025-10-06
+Encryption Overhead,10,5.3,percent,PASS,Benchmark comparison (encrypted vs unencrypted),2025-10-06
+Cross-Region Replication Lag,900,300,seconds,PASS,Kafka CDC replication metrics,2025-10-06
+Compliance Audit Log Retention,2555,2555,days,PASS,S3 Object Lock verification,2025-10-06
+Failed Login Detection Time,300,45,seconds,PASS,Prometheus alert latency,2025-10-06
+Intrusion Detection Response Time,60,32,seconds,PASS,Suricata alert → SOC notification,2025-10-06

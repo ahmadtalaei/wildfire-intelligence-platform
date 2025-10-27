@@ -1,0 +1,32 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+bases:
+  - ../../base
+
+namePrefix: prod-
+
+patchesStrategicMerge:
+  - replica-patches.yaml
+  - resource-patches.yaml
+
+configMapGenerator:
+  - name: service-config
+    behavior: merge
+    literals:
+      - log-level=WARNING
+      - cache-ttl=600
+
+secretGenerator:
+  - name: postgres-secret
+    behavior: replace
+    envs:
+      - secrets.env
+  - name: redis-secret
+    behavior: replace
+    envs:
+      - secrets.env
+  - name: api-keys
+    behavior: replace
+    envs:
+      - api-keys.env

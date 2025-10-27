@@ -1,0 +1,91 @@
+{
+  "type": "record",
+  "name": "FireDetection",
+  "namespace": "com.wildfire.streaming",
+  "doc": "Avro schema for fire detection events from satellite sources (NASA FIRMS, etc.)",
+  "fields": [
+    {
+      "name": "detection_id",
+      "type": "string",
+      "doc": "Unique identifier for this fire detection (e.g., FIRMS_20250104_00142)"
+    },
+    {
+      "name": "latitude",
+      "type": "double",
+      "doc": "Latitude in decimal degrees (WGS84), valid range: [-90, 90]"
+    },
+    {
+      "name": "longitude",
+      "type": "double",
+      "doc": "Longitude in decimal degrees (WGS84), valid range: [-180, 180]"
+    },
+    {
+      "name": "timestamp",
+      "type": "long",
+      "logicalType": "timestamp-millis",
+      "doc": "Detection timestamp in milliseconds since Unix epoch (UTC)"
+    },
+    {
+      "name": "confidence",
+      "type": ["null", "int"],
+      "default": null,
+      "doc": "Confidence score (0-100), or null if not provided. 0=low, 50=nominal, 100=high"
+    },
+    {
+      "name": "brightness",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Brightness temperature in Kelvin, typically 300-400K for active fires"
+    },
+    {
+      "name": "frp",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Fire Radiative Power in Megawatts (MW), indicates fire intensity"
+    },
+    {
+      "name": "satellite",
+      "type": "string",
+      "doc": "Satellite name (e.g., NOAA-20, Suomi-NPP, Terra, Aqua, NOAA-21)"
+    },
+    {
+      "name": "sensor",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Sensor/instrument name (e.g., VIIRS, MODIS, AVHRR)"
+    },
+    {
+      "name": "scan_track",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Scan/track values for pixel resolution, typically 1.0-1.5"
+    },
+    {
+      "name": "acq_date",
+      "type": "string",
+      "doc": "Acquisition date in YYYY-MM-DD format"
+    },
+    {
+      "name": "acq_time",
+      "type": "string",
+      "doc": "Acquisition time in HHMM format (UTC)"
+    },
+    {
+      "name": "bright_t31",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Brightness temperature for Band 31 (11 micron) in Kelvin"
+    },
+    {
+      "name": "daynight",
+      "type": "string",
+      "doc": "Day or night acquisition: 'D' or 'N'"
+    },
+    {
+      "name": "version",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Data version (e.g., '2.0NRT' for Near Real-Time)"
+    }
+  ]
+}

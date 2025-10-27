@@ -1,0 +1,427 @@
+/**
+ * Alerts Page for Fire Chief Dashboard
+ * 
+ * Displays real-time fire alerts, warnings, and notifications
+ * for fire chiefs to monitor critical situations.
+ */
+
+import React, { useState, useEffect } from 'react';
+import {
+  Box,
+  Paper,
+  Typography,
+  Alert,
+  AlertTitle,
+  Chip,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  IconButton,
+  Button,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Grid,
+  Card,
+  CardContent,
+  CardActions,
+  Divider,
+  Badge,
+} from '@mui/material';
+import {
+  Warning,
+  Error,
+  Info,
+  CheckCircle,
+  NotificationsActive,
+  LocationOn,
+  AccessTime,
+  FilterList,
+  Refresh,
+  Settings,
+  Phone,
+  Map,
+} from '@mui/icons-material';
+import { format } from 'date-fns';
+
+// Types
+interface FireAlert {
+  id: string;
+  title: string;
+  description: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  type: 'fire_detected' | 'weather_warning' | 'evacuation_order' | 'resource_alert';
+  location: {
+    latitude: number;
+    longitude: number;
+    name: string;
+  };
+  timestamp: string;
+  isActive: boolean;
+  acknowledged: boolean;
+  priority: number;
+}
+
+const AlertsPage: React.FC = () => {
+  const [alerts, setAlerts] = useState<FireAlert[]>([]);
+  const [filterSeverity, setFilterSeverity] = useState<string>('all');
+  const [filterType, setFilterType] = useState<string>('all');
+  const [loading, setLoading] = useState(false);
+
+  // Mock data for demonstration
+  useEffect(() => {
+    const mockAlerts: FireAlert[] = [
+      {
+        id: '1',
+        title: 'High Fire Risk - Santa Ana Winds',
+        description: 'Red Flag Warning issued for Los Angeles County. Winds gusting up to 70 mph with relative humidity below 10%.',
+        severity: 'critical',
+        type: 'weather_warning',
+        location: {
+          latitude: 34.0522,
+          longitude: -118.2437,
+          name: 'Los Angeles County'
+        },
+        timestamp: new Date().toISOString(),
+        isActive: true,
+        acknowledged: false,
+        priority: 1
+      },
+      {
+        id: '2',
+        title: 'Fire Detection - Saddleridge Area',
+        description: 'Satellite detection confirms active fire with 85% confidence. Size estimated at 25 hectares and growing.',
+        severity: 'high',
+        type: 'fire_detected',
+        location: {
+          latitude: 34.2608,
+          longitude: -118.4661,
+          name: 'Saddleridge, CA'
+        },
+        timestamp: new Date(Date.now() - 300000).toISOString(),
+        isActive: true,
+        acknowledged: false,
+        priority: 2
+      },
+      {
+        id: '3',
+        title: 'Evacuation Order - Zone 7',
+        description: 'Mandatory evacuation issued for residential areas in Zone 7 due to approaching fire.',
+        severity: 'critical',
+        type: 'evacuation_order',
+        location: {
+          latitude: 34.1478,
+          longitude: -118.1445,
+          name: 'Pasadena, CA'
+        },
+        timestamp: new Date(Date.now() - 600000).toISOString(),
+        isActive: true,
+        acknowledged: true,
+        priority: 1
+      },
+      {
+        id: '4',
+        title: 'Resource Alert - Low Water Supply',
+        description: 'Water tanker availability below threshold in District 12. Additional resources requested.',
+        severity: 'medium',
+        type: 'resource_alert',
+        location: {
+          latitude: 34.0928,
+          longitude: -117.4353,
+          name: 'San Bernardino County'
+        },
+        timestamp: new Date(Date.now() - 900000).toISOString(),
+        isActive: true,
+        acknowledged: true,
+        priority: 3
+      }
+    ];
+    setAlerts(mockAlerts);
+  }, []);
+
+  const getSeverityColor = (severity: string) => {
+    switch (severity) {
+      case 'critical': return 'error';
+      case 'high': return 'warning';
+      case 'medium': return 'info';
+      case 'low': return 'success';
+      default: return 'default';
+    }
+  };
+
+  const getSeverityIcon = (severity: string) => {
+    switch (severity) {
+      case 'critical': return <Error />;
+      case 'high': return <Warning />;
+      case 'medium': return <Info />;
+      case 'low': return <CheckCircle />;
+      default: return <Info />;
+    }
+  };
+
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case 'fire_detected': return '🔥';
+      case 'weather_warning': return '🌪️';
+      case 'evacuation_order': return '🚨';
+      case 'resource_alert': return '🚛';
+      default: return '📢';
+    }
+  };
+
+  const filteredAlerts = alerts.filter(alert => {
+    const severityMatch = filterSeverity === 'all' || alert.severity === filterSeverity;
+    const typeMatch = filterType === 'all' || alert.type === filterType;
+    return severityMatch && typeMatch;
+  });
+
+  const activeAlertsCount = alerts.filter(alert => alert.isActive && !alert.acknowledged).length;
+
+  const handleAcknowledge = (alertId: string) => {
+    setAlerts(prev => prev.map(alert => 
+      alert.id === alertId ? { ...alert, acknowledged: true } : alert
+    ));
+  };
+
+  const handleRefresh = () => {
+    setLoading(true);
+    // Simulate API call
+    setTimeout(() => {
+      setLoading(false);
+    }, 1000);
+  };
+
+  return (
+    <Box sx={{ p: 3 }}>
+      {/* Header */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Box>
+          <Typography variant="h4" component="h1" gutterBottom>
+            Fire Alerts & Notifications
+          </Typography>
+          <Typography variant="subtitle1" color="text.secondary">
+            Real-time alerts and warnings for active fire situations
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant="outlined"
+            startIcon={<Refresh />}
+            onClick={handleRefresh}
+            disabled={loading}
+          >
+            Refresh
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<Settings />}
+          >
+            Configure
+          </Button>
+        </Box>
+      </Box>
+
+      {/* Alert Summary */}
+      <Grid container spacing={3} sx={{ mb: 3 }}>
+        <Grid item xs={12} md={3}>
+          <Card>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Badge badgeContent={activeAlertsCount} color="error">
+                  <NotificationsActive color="primary" sx={{ fontSize: 40 }} />
+                </Badge>
+                <Box sx={{ ml: 2 }}>
+                  <Typography variant="h4">{activeAlertsCount}</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Active Alerts
+                  </Typography>
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <Card>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Error color="error" sx={{ fontSize: 40 }} />
+                <Box sx={{ ml: 2 }}>
+                  <Typography variant="h4">
+                    {alerts.filter(a => a.severity === 'critical').length}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Critical
+                  </Typography>
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <Card>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Warning color="warning" sx={{ fontSize: 40 }} />
+                <Box sx={{ ml: 2 }}>
+                  <Typography variant="h4">
+                    {alerts.filter(a => a.severity === 'high').length}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    High Priority
+                  </Typography>
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <Card>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <CheckCircle color="success" sx={{ fontSize: 40 }} />
+                <Box sx={{ ml: 2 }}>
+                  <Typography variant="h4">
+                    {alerts.filter(a => a.acknowledged).length}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Acknowledged
+                  </Typography>
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {/* Filters */}
+      <Paper sx={{ p: 2, mb: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <FilterList />
+          <Typography variant="h6">Filters</Typography>
+          <FormControl size="small" sx={{ minWidth: 120 }}>
+            <InputLabel>Severity</InputLabel>
+            <Select
+              value={filterSeverity}
+              onChange={(e) => setFilterSeverity(e.target.value)}
+              label="Severity"
+            >
+              <MenuItem value="all">All</MenuItem>
+              <MenuItem value="critical">Critical</MenuItem>
+              <MenuItem value="high">High</MenuItem>
+              <MenuItem value="medium">Medium</MenuItem>
+              <MenuItem value="low">Low</MenuItem>
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 120 }}>
+            <InputLabel>Type</InputLabel>
+            <Select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              label="Type"
+            >
+              <MenuItem value="all">All</MenuItem>
+              <MenuItem value="fire_detected">Fire Detection</MenuItem>
+              <MenuItem value="weather_warning">Weather Warning</MenuItem>
+              <MenuItem value="evacuation_order">Evacuation Order</MenuItem>
+              <MenuItem value="resource_alert">Resource Alert</MenuItem>
+            </Select>
+          </FormControl>
+        </Box>
+      </Paper>
+
+      {/* Alerts List */}
+      <Paper sx={{ p: 0 }}>
+        <List>
+          {filteredAlerts.map((alert, index) => (
+            <React.Fragment key={alert.id}>
+              <ListItem
+                sx={{
+                  bgcolor: alert.acknowledged ? 'grey.50' : 'inherit',
+                  border: alert.severity === 'critical' && !alert.acknowledged ? 2 : 0,
+                  borderColor: 'error.main',
+                  borderRadius: 1,
+                  mb: alert.severity === 'critical' && !alert.acknowledged ? 1 : 0
+                }}
+              >
+                <ListItemIcon>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="h6">{getTypeIcon(alert.type)}</Typography>
+                    {getSeverityIcon(alert.severity)}
+                  </Box>
+                </ListItemIcon>
+                <ListItemText
+                  primary={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                      <Typography variant="h6">{alert.title}</Typography>
+                      <Chip
+                        label={alert.severity.toUpperCase()}
+                        color={getSeverityColor(alert.severity) as any}
+                        size="small"
+                      />
+                      {alert.acknowledged && (
+                        <Chip label="ACKNOWLEDGED" color="success" size="small" />
+                      )}
+                    </Box>
+                  }
+                  secondary={
+                    <Box>
+                      <Typography variant="body2" sx={{ mb: 1 }}>
+                        {alert.description}
+                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <LocationOn fontSize="small" />
+                          <Typography variant="caption">{alert.location.name}</Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <AccessTime fontSize="small" />
+                          <Typography variant="caption">
+                            {format(new Date(alert.timestamp), 'MMM dd, HH:mm')}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </Box>
+                  }
+                />
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  {!alert.acknowledged && (
+                    <Button
+                      variant="contained"
+                      size="small"
+                      onClick={() => handleAcknowledge(alert.id)}
+                    >
+                      Acknowledge
+                    </Button>
+                  )}
+                  <IconButton size="small" title="View on Map">
+                    <Map />
+                  </IconButton>
+                  <IconButton size="small" title="Contact Units">
+                    <Phone />
+                  </IconButton>
+                </Box>
+              </ListItem>
+              {index < filteredAlerts.length - 1 && <Divider />}
+            </React.Fragment>
+          ))}
+        </List>
+      </Paper>
+
+      {filteredAlerts.length === 0 && (
+        <Box sx={{ textAlign: 'center', py: 8 }}>
+          <CheckCircle sx={{ fontSize: 64, color: 'success.main', mb: 2 }} />
+          <Typography variant="h5" gutterBottom>
+            No Active Alerts
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            All alerts have been acknowledged or resolved.
+          </Typography>
+        </Box>
+      )}
+    </Box>
+  );
+};
+
+export default AlertsPage;

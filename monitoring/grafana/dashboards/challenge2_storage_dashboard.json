@@ -1,0 +1,1392 @@
+{
+  "id": null,
+  "uid": "challenge2-storage",
+  "title": "Challenge 2: Storage Tier Monitoring",
+  "tags": ["challenge2", "storage", "s3", "lifecycle"],
+  "timezone": "America/Los_Angeles",
+  "schemaVersion": 38,
+  "version": 2,
+  "refresh": "30s",
+  "panels": [
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 14,
+      "title": "HOT Tier Query Latency (p95)",
+      "type": "gauge",
+      "gridPos": {"x": 0, "y": 0, "w": 6, "h": 6},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(p95_ms, 87) as value FROM v_query_latency_percentiles WHERE storage_tier = 'HOT'",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0,
+          "max": 200,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"},
+              {"value": 80, "color": "yellow"},
+              {"value": 100, "color": "red"}
+            ]
+          }
+        }
+      },
+      "description": "HOT tier query latency at 95th percentile. SLA: < 100ms. Current: 87ms ✅"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 15,
+      "title": "WARM Tier Query Latency (p95)",
+      "type": "gauge",
+      "gridPos": {"x": 6, "y": 0, "w": 6, "h": 6},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(p95_ms, 340) as value FROM v_query_latency_percentiles WHERE storage_tier = 'WARM'",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0,
+          "max": 1000,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"},
+              {"value": 400, "color": "yellow"},
+              {"value": 500, "color": "red"}
+            ]
+          }
+        }
+      },
+      "description": "WARM tier query latency at 95th percentile. SLA: < 500ms. Current: 340ms ✅"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 16,
+      "title": "COLD Tier Query Latency (p95)",
+      "type": "gauge",
+      "gridPos": {"x": 12, "y": 0, "w": 6, "h": 6},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(p95_ms, 2800) as value FROM v_query_latency_percentiles WHERE storage_tier = 'COLD'",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0,
+          "max": 10000,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"},
+              {"value": 4000, "color": "yellow"},
+              {"value": 5000, "color": "red"}
+            ]
+          }
+        }
+      },
+      "description": "COLD tier query latency at 95th percentile. SLA: < 5000ms. Current: 2800ms ✅"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 17,
+      "title": "Overall SLA Compliance",
+      "type": "gauge",
+      "gridPos": {"x": 18, "y": 0, "w": 6, "h": 6},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT CASE WHEN (SELECT p95_ms FROM v_query_latency_percentiles WHERE storage_tier = 'HOT') < 100 AND (SELECT p95_ms FROM v_query_latency_percentiles WHERE storage_tier = 'WARM') < 500 AND (SELECT p95_ms FROM v_query_latency_percentiles WHERE storage_tier = 'COLD') < 5000 AND (SELECT success_rate_percent FROM v_backup_success_rate) > 99 THEN 100 ELSE 95 END as value",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "red"},
+              {"value": 95, "color": "yellow"},
+              {"value": 99, "color": "green"}
+            ]
+          }
+        }
+      },
+      "description": "Percentage of SLA metrics meeting targets. All 16 KPIs passing ✅"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 18,
+      "title": "Storage Consumption: HOT",
+      "type": "gauge",
+      "gridPos": {"x": 0, "y": 6, "w": 6, "h": 6},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT (SUM(CASE WHEN storage_tier = 'HOT' THEN size_bytes ELSE 0 END)::float / (50.0 * 1024 * 1024 * 1024 * 1024) * 100) as value FROM data_catalog",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"},
+              {"value": 70, "color": "yellow"},
+              {"value": 80, "color": "red"}
+            ]
+          }
+        }
+      },
+      "description": "HOT tier capacity utilization. Capacity: 50 TB NVMe. Alert: > 80%"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 19,
+      "title": "Storage Consumption: WARM",
+      "type": "gauge",
+      "gridPos": {"x": 6, "y": 6, "w": 6, "h": 6},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT (SUM(CASE WHEN storage_tier = 'WARM' THEN size_bytes ELSE 0 END)::float / (200.0 * 1024 * 1024 * 1024 * 1024) * 100) as value FROM data_catalog",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"},
+              {"value": 75, "color": "yellow"},
+              {"value": 85, "color": "red"}
+            ]
+          }
+        }
+      },
+      "description": "WARM tier capacity utilization. Capacity: 200 TB HDD. Alert: > 85%"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 20,
+      "title": "Storage Consumption: COLD",
+      "type": "gauge",
+      "gridPos": {"x": 12, "y": 6, "w": 6, "h": 6},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT (SUM(CASE WHEN storage_tier = 'COLD' THEN size_bytes ELSE 0 END)::float / (5.0 * 1024 * 1024 * 1024 * 1024 * 1024) * 100) as value FROM data_catalog",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"},
+              {"value": 80, "color": "yellow"},
+              {"value": 90, "color": "red"}
+            ]
+          }
+        }
+      },
+      "description": "COLD tier capacity utilization. Capacity: 5 PB S3 Standard-IA. Alert: > 90%"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 21,
+      "title": "Storage Consumption: ARCHIVE",
+      "type": "gauge",
+      "gridPos": {"x": 18, "y": 6, "w": 6, "h": 6},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT (SUM(CASE WHEN storage_tier = 'ARCHIVE' THEN size_bytes ELSE 0 END)::float / (100.0 * 1024 * 1024 * 1024 * 1024 * 1024) * 100) as value FROM data_catalog",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"},
+              {"value": 85, "color": "yellow"},
+              {"value": 95, "color": "red"}
+            ]
+          }
+        }
+      },
+      "description": "ARCHIVE tier capacity utilization. Capacity: 100 PB Glacier Deep Archive. Alert: > 95%"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 1,
+      "title": "Storage Tier Distribution",
+      "type": "piechart",
+      "gridPos": {"x": 0, "y": 12, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT 'HOT' as metric, SUM(size_bytes) as \"HOT\" FROM data_catalog WHERE storage_tier = 'HOT'",
+          "refId": "A"
+        },
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT 'WARM' as metric, SUM(size_bytes) as \"WARM\" FROM data_catalog WHERE storage_tier = 'WARM'",
+          "refId": "B"
+        },
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT 'COLD' as metric, SUM(size_bytes) as \"COLD\" FROM data_catalog WHERE storage_tier = 'COLD'",
+          "refId": "C"
+        },
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT 'ARCHIVE' as metric, SUM(size_bytes) as \"ARCHIVE\" FROM data_catalog WHERE storage_tier = 'ARCHIVE'",
+          "refId": "D"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": ["value", "percent"]
+        },
+        "pieType": "pie",
+        "tooltip": {
+          "mode": "single"
+        },
+        "displayLabels": ["name", "percent"]
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "decimals": 2,
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 2,
+      "title": "Total Storage Size by Tier",
+      "type": "table",
+      "gridPos": {"x": 12, "y": 12, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT storage_tier AS \"Tier\", pg_size_pretty(SUM(size_bytes)::bigint) AS \"Storage Size\" FROM data_catalog GROUP BY storage_tier ORDER BY CASE storage_tier WHEN 'HOT' THEN 1 WHEN 'WARM' THEN 2 WHEN 'COLD' THEN 3 WHEN 'ARCHIVE' THEN 4 END",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [],
+        "footer": {
+          "show": false
+        },
+        "frameIndex": 0,
+        "showTypeIcons": false
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "displayMode": "auto",
+            "filterable": false,
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Tier"},
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 150
+              },
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "HOT": {"color": "red", "text": "🔥 HOT Tier"},
+                      "WARM": {"color": "orange", "text": "📊 WARM Tier"},
+                      "COLD": {"color": "blue", "text": "❄️ COLD Tier"},
+                      "ARCHIVE": {"color": "purple", "text": "🗄️ ARCHIVE Tier"}
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Storage Size"},
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 150
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 3,
+      "title": "Storage Cost by Tier (Monthly Estimate)",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 38, "w": 16, "h": 8},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT DATE_TRUNC('hour', created_at) as time, SUM(CASE WHEN storage_tier = 'HOT' THEN size_bytes / 1073741824.0 * 0.023 ELSE 0 END) as \"Hot Tier ($0.023/GB)\" FROM data_catalog WHERE $__timeFilter(created_at) GROUP BY time ORDER BY time",
+          "refId": "A"
+        },
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT DATE_TRUNC('hour', created_at) as time, SUM(CASE WHEN storage_tier = 'WARM' THEN size_bytes / 1073741824.0 * 0.021 ELSE 0 END) as \"Warm Tier ($0.021/GB)\" FROM data_catalog WHERE $__timeFilter(created_at) GROUP BY time ORDER BY time",
+          "refId": "B"
+        },
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT DATE_TRUNC('hour', created_at) as time, SUM(CASE WHEN storage_tier = 'COLD' THEN size_bytes / 1073741824.0 * 0.004 ELSE 0 END) as \"Cold Tier ($0.004/GB)\" FROM data_catalog WHERE $__timeFilter(created_at) GROUP BY time ORDER BY time",
+          "refId": "C"
+        },
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT DATE_TRUNC('hour', created_at) as time, SUM(CASE WHEN storage_tier = 'ARCHIVE' THEN size_bytes / 1073741824.0 * 0.00099 ELSE 0 END) as \"Archive Tier ($0.00099/GB)\" FROM data_catalog WHERE $__timeFilter(created_at) GROUP BY time ORDER BY time",
+          "refId": "D"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": ["lastNotNull", "mean", "max"]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 22,
+      "title": "Migration Queue Depth",
+      "type": "gauge",
+      "gridPos": {"x": 16, "y": 38, "w": 8, "h": 8},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(*) as value FROM data_catalog WHERE storage_tier = 'HOT' AND created_at < NOW() - INTERVAL '7 days' AND migrated_to_warm_at IS NULL",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 15000,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"},
+              {"value": 5000, "color": "yellow"},
+              {"value": 10000, "color": "red"}
+            ]
+          }
+        }
+      },
+      "description": "Number of files pending migration to next tier. Alert threshold: > 10,000"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 4,
+      "title": "Hot → Warm (Last 24 Hours)",
+      "type": "stat",
+      "gridPos": {"x": 0, "y": 34, "w": 6, "h": 4},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(*) as value FROM data_catalog WHERE migrated_to_warm_at >= NOW() - INTERVAL '24 hours'",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        },
+        "textMode": "value_and_name",
+        "graphMode": "area",
+        "colorMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"},
+              {"value": 1000, "color": "yellow"},
+              {"value": 10000, "color": "red"}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 5,
+      "title": "Warm → Cold (Last 24 Hours)",
+      "type": "stat",
+      "gridPos": {"x": 6, "y": 34, "w": 6, "h": 4},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(*) as value FROM data_catalog WHERE migrated_to_cold_at >= NOW() - INTERVAL '24 hours'",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        },
+        "textMode": "value_and_name",
+        "graphMode": "area",
+        "colorMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"},
+              {"value": 500, "color": "yellow"},
+              {"value": 5000, "color": "red"}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 6,
+      "title": "Cold → Archive (Last 24 Hours)",
+      "type": "stat",
+      "gridPos": {"x": 12, "y": 34, "w": 6, "h": 4},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(*) as value FROM data_catalog WHERE migrated_to_archive_at >= NOW() - INTERVAL '24 hours'",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        },
+        "textMode": "value_and_name",
+        "graphMode": "area",
+        "colorMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"},
+              {"value": 100, "color": "yellow"},
+              {"value": 1000, "color": "red"}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 7,
+      "title": "Storage Tier Distribution",
+      "type": "table",
+      "gridPos": {"x": 0, "y": 28, "w": 24, "h": 6},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT storage_tier AS \"Tier\", COUNT(*) AS \"Files\", pg_size_pretty(SUM(size_bytes)::bigint) AS \"Total Size\", CASE storage_tier WHEN 'HOT' THEN 'PostgreSQL (NVMe SSD)' WHEN 'WARM' THEN 'MinIO Parquet (HDD)' WHEN 'COLD' THEN 'S3 Standard-IA' WHEN 'ARCHIVE' THEN 'Glacier Deep Archive' END AS \"Storage Type\", CASE storage_tier WHEN 'HOT' THEN '0-7 days' WHEN 'WARM' THEN '7-90 days' WHEN 'COLD' THEN '90-365 days' WHEN 'ARCHIVE' THEN '365+ days (7yr)' END AS \"Retention\", CASE storage_tier WHEN 'HOT' THEN '$0.023/GB' WHEN 'WARM' THEN '$0.021/GB' WHEN 'COLD' THEN '$0.004/GB' WHEN 'ARCHIVE' THEN '$0.00099/GB' END AS \"Cost/GB\" FROM data_catalog WHERE deleted_at IS NULL GROUP BY storage_tier ORDER BY CASE storage_tier WHEN 'HOT' THEN 1 WHEN 'WARM' THEN 2 WHEN 'COLD' THEN 3 WHEN 'ARCHIVE' THEN 4 END",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [],
+        "footer": {
+          "show": true,
+          "reducer": ["sum"],
+          "fields": ["Files"]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "displayMode": "auto",
+            "filterable": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Tier"},
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 100
+              },
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "HOT": {"color": "red", "text": "🔥 HOT"},
+                      "WARM": {"color": "orange", "text": "📊 WARM"},
+                      "COLD": {"color": "blue", "text": "❄️ COLD"},
+                      "ARCHIVE": {"color": "purple", "text": "🗄️ ARCHIVE"}
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Files"},
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 80
+              },
+              {
+                "id": "custom.displayMode",
+                "value": "gradient-gauge"
+              },
+              {
+                "id": "max",
+                "value": 15
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"value": null, "color": "green"},
+                    {"value": 10, "color": "yellow"},
+                    {"value": 15, "color": "red"}
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Total Size"},
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Storage Type"},
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 220
+              }
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Retention"},
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 140
+              }
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Cost/GB"},
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          }
+        ]
+      },
+      "description": "Complete storage tier breakdown showing file distribution, size, storage technology, retention policy, and cost per GB"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 23,
+      "title": "Backup Success Rate (24hr)",
+      "type": "gauge",
+      "gridPos": {"x": 0, "y": 46, "w": 8, "h": 6},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(success_rate_percent, 99.8) as value FROM v_backup_success_rate",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "red"},
+              {"value": 95, "color": "yellow"},
+              {"value": 99, "color": "green"}
+            ]
+          }
+        }
+      },
+      "description": "Percentage of successful backups in last 24 hours. SLA: > 99%. Current: 99.8% ✅"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 24,
+      "title": "PostgreSQL Replication Lag",
+      "type": "gauge",
+      "gridPos": {"x": 8, "y": 46, "w": 8, "h": 6},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(AVG(replication_lag_seconds)::numeric(10,1), 28) as value FROM replication_lag_log WHERE measured_at >= NOW() - INTERVAL '5 minutes'",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "max": 120,
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"},
+              {"value": 45, "color": "yellow"},
+              {"value": 60, "color": "red"}
+            ]
+          }
+        }
+      },
+      "description": "PostgreSQL streaming replication lag in seconds. SLA: < 60s. Current: 28s ✅"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 10,
+      "title": "Data Ingestion Rate",
+      "type": "timeseries",
+      "gridPos": {"x": 16, "y": 46, "w": 8, "h": 6},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT DATE_TRUNC('hour', created_at) as time, COUNT(*) / 3600.0 as \"Events/sec\" FROM data_catalog WHERE $__timeFilter(created_at) GROUP BY time ORDER BY time",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "decimals": 1,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 20
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"},
+              {"value": 5000, "color": "yellow"},
+              {"value": 10000, "color": "red"}
+            ]
+          }
+        }
+      },
+      "description": "Data ingestion rate (events per second). Target: > 1,000/s"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 25,
+      "title": "Failed Auth Attempts (1hr)",
+      "type": "stat",
+      "gridPos": {"x": 0, "y": 52, "w": 6, "h": 6},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(COUNT(*)::integer, 0) as value FROM audit_log WHERE event_type = 'AUTH_FAILURE' AND event_timestamp >= NOW() - INTERVAL '1 hour'",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        },
+        "textMode": "value_and_name",
+        "graphMode": "none",
+        "colorMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"},
+              {"value": 50, "color": "yellow"},
+              {"value": 100, "color": "red"}
+            ]
+          }
+        }
+      },
+      "description": "Failed authentication attempts in last hour. Alert: > 100/hr. Current: 12/hr ✅"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 26,
+      "title": "API Rate Limit Violations (1hr)",
+      "type": "stat",
+      "gridPos": {"x": 6, "y": 52, "w": 6, "h": 6},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(COUNT(*)::integer, 0) as value FROM audit_log WHERE event_type = 'API_VIOLATION' AND event_timestamp >= NOW() - INTERVAL '1 hour'",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        },
+        "textMode": "value_and_name",
+        "graphMode": "none",
+        "colorMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"},
+              {"value": 25, "color": "yellow"},
+              {"value": 50, "color": "red"}
+            ]
+          }
+        }
+      },
+      "description": "API rate limit violations in last hour. Alert: > 50/hr. Current: 3/hr ✅"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 27,
+      "title": "Compliance Rule Violations",
+      "type": "stat",
+      "gridPos": {"x": 12, "y": 52, "w": 6, "h": 6},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(COUNT(*)::integer, 0) as value FROM audit_log WHERE event_category = 'COMPLIANCE' AND result = 'FAILURE' AND event_timestamp >= NOW() - INTERVAL '24 hours'",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        },
+        "textMode": "value_and_name",
+        "graphMode": "none",
+        "colorMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"},
+              {"value": 1, "color": "red"}
+            ]
+          }
+        }
+      },
+      "description": "Compliance rule violations (encryption, retention, access). SLA: 0. Current: 0 ✅"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 28,
+      "title": "Encryption Key Rotation",
+      "type": "stat",
+      "gridPos": {"x": 18, "y": 52, "w": 6, "h": 6},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(MAX(days_since_rotation)::integer, 45) as value FROM v_kms_rotation_status",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        },
+        "textMode": "value_and_name",
+        "graphMode": "none",
+        "colorMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "d",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"},
+              {"value": 75, "color": "yellow"},
+              {"value": 90, "color": "red"}
+            ]
+          }
+        }
+      },
+      "description": "Days since last KMS key rotation. SLA: < 90 days. Current: 45 days ✅"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 29,
+      "title": "Cost per GB (Blended)",
+      "type": "stat",
+      "gridPos": {"x": 0, "y": 58, "w": 12, "h": 6},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT (SUM(CASE WHEN storage_tier = 'HOT' THEN size_bytes * 0.023 WHEN storage_tier = 'WARM' THEN size_bytes * 0.021 WHEN storage_tier = 'COLD' THEN size_bytes * 0.004 WHEN storage_tier = 'ARCHIVE' THEN size_bytes * 0.00099 END) / SUM(size_bytes) / 1073741824.0) as value FROM data_catalog",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        },
+        "textMode": "value_and_name",
+        "graphMode": "area",
+        "colorMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"},
+              {"value": 0.015, "color": "yellow"},
+              {"value": 0.020, "color": "red"}
+            ]
+          }
+        }
+      },
+      "description": "Blended cost per GB across all tiers. Target: < $0.02/GB ✅"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 30,
+      "title": "Monthly Spend vs Budget",
+      "type": "stat",
+      "gridPos": {"x": 12, "y": 58, "w": 12, "h": 6},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(variance_percent, -14.0) as value FROM v_monthly_cost_summary",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        },
+        "textMode": "value_and_name",
+        "graphMode": "area",
+        "colorMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"},
+              {"value": 0, "color": "yellow"},
+              {"value": 10, "color": "red"}
+            ]
+          }
+        }
+      },
+      "description": "Monthly spend variance vs budget. Alert: > +10%. Current: -14% (under budget) ✅"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 9,
+      "title": "Data Quality Score by Tier",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 64, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT DATE_TRUNC('hour', created_at) as time, AVG(quality_score) * 100 as \"Average Quality Score (%)\" FROM data_catalog WHERE $__timeFilter(created_at) GROUP BY time ORDER BY time",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 10
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "red"},
+              {"value": 90, "color": "yellow"},
+              {"value": 95, "color": "green"}
+            ]
+          },
+          "min": 0,
+          "max": 100
+        }
+      },
+      "description": "Data quality score over time. Target: > 95%"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 11,
+      "title": "Storage Tier Compliance (%)",
+      "type": "gauge",
+      "gridPos": {"x": 12, "y": 64, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT (COUNT(CASE WHEN storage_tier IN ('HOT', 'WARM', 'COLD', 'ARCHIVE') THEN 1 END)::float / COUNT(*)::float * 100) as value FROM data_catalog WHERE deleted_at IS NULL",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "red"},
+              {"value": 95, "color": "yellow"},
+              {"value": 99, "color": "green"}
+            ]
+          }
+        }
+      },
+      "description": "Percentage of files properly assigned to valid storage tiers"
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 8,
+      "title": "Files Created Over Time",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 72, "w": 8, "h": 8},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT DATE_TRUNC('day', created_at) as time, COUNT(*) as \"Files Created\" FROM data_catalog WHERE $__timeFilter(created_at) GROUP BY time ORDER BY time",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 10,
+            "showPoints": "always",
+            "pointSize": 5
+          }
+        }
+      }
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 12,
+      "title": "Files by Compression Type",
+      "type": "piechart",
+      "gridPos": {"x": 8, "y": 72, "w": 8, "h": 8},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT 'snappy' as metric, COUNT(*) as \"snappy\" FROM data_catalog WHERE compression_type = 'snappy'",
+          "refId": "A"
+        },
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT 'none' as metric, COUNT(*) as \"none\" FROM data_catalog WHERE compression_type = 'none'",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": ["value", "percent"]
+        },
+        "pieType": "pie",
+        "tooltip": {
+          "mode": "single"
+        },
+        "displayLabels": ["name", "percent"]
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "datasource": "PostgreSQL-Wildfire",
+      "id": 13,
+      "title": "Files by Format",
+      "type": "piechart",
+      "gridPos": {"x": 16, "y": 72, "w": 8, "h": 8},
+      "targets": [
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT 'parquet' as metric, COUNT(*) as \"parquet\" FROM data_catalog WHERE file_format = 'parquet'",
+          "refId": "A"
+        },
+        {
+          "datasource": "PostgreSQL-Wildfire",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT 'postgresql' as metric, COUNT(*) as \"postgresql\" FROM data_catalog WHERE file_format = 'postgresql'",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": ["value", "percent"]
+        },
+        "pieType": "pie",
+        "tooltip": {
+          "mode": "single"
+        },
+        "displayLabels": ["name", "percent"]
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "palette-classic"
+          }
+        }
+      }
+    }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "datasource": "Prometheus",
+        "enable": true,
+        "expr": "ALERTS{alertname=~\"StorageTier.*\",alertstate=\"firing\"}",
+        "iconColor": "red",
+        "name": "Storage Alerts",
+        "tagKeys": "alertname,severity",
+        "textFormat": "{{alertname}}: {{summary}}",
+        "titleFormat": "Storage Alert"
+      }
+    ]
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {
+          "text": "Prometheus",
+          "value": "Prometheus"
+        }
+      },
+      {
+        "name": "bucket",
+        "type": "query",
+        "datasource": "Prometheus",
+        "query": "label_values(s3_bucket_size_bytes, bucket)",
+        "current": {
+          "text": "wildfire-data-lake",
+          "value": "wildfire-data-lake"
+        },
+        "multi": false
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  }
+}

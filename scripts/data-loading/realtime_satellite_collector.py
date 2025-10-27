@@ -1,0 +1,310 @@
+#!/usr/bin/env python3
+"""
+Real-Time NASA FIRMS Satellite Data Collector
+Continuously monitors NASA FIRMS for new fire detections and loads them into the platform.
+
+Features:
+- Real-time polling every 5 minutes
+- Multiple satellite data sources (VIIRS, MODIS)
+- Automatic data deduplication
+- Error handling and retry logic
+- Configurable geographic regions
+"""
+
+import asyncio
+import aiohttp
+import csv
+import io
+import json
+import time
+import hashlib
+from datetime import datetime, timedelta
+from typing import Dict, List, Set
+import logging
+from config import (
+    USER_AGENT, PLATFORM_API_FIRES, NASA_FIRMS_MAP_KEY, NASA_FIRMS_POLL_INTERVAL,
+    MAX_RETRIES, REQUEST_TIMEOUT, CALIFORNIA_BOUNDS
+)
+
+# Configuration
+FIRMS_API_KEY = NASA_FIRMS_MAP_KEY
+FIRMS_BASE_URL = "https://firms.modaps.eosdis.nasa.gov/api/area"
+
+# Polling configuration  
+POLL_INTERVAL_SECONDS = NASA_FIRMS_POLL_INTERVAL
+DEDUPE_HOURS = 24  # Avoid duplicate detections within 24 hours
+
+# Available NASA FIRMS satellite datasets
+SATELLITE_SOURCES = [
+    {"id": "VIIRS_SNPP_NRT", "name": "VIIRS S-NPP", "resolution": "375m"},
+    {"id": "VIIRS_NOAA20_NRT", "name": "VIIRS NOAA-20", "resolution": "375m"},
+    {"id": "VIIRS_NOAA21_NRT", "name": "VIIRS NOAA-21", "resolution": "375m"},
+    {"id": "MODIS_NRT", "name": "MODIS Terra", "resolution": "1km"},
+    {"id": "MODIS_A_NRT", "name": "MODIS Aqua", "resolution": "1km"}
+]
+
+class RealTimeSatelliteCollector:
+    def __init__(self):
+        self.api_key = FIRMS_API_KEY
+        self.platform_url = PLATFORM_API_FIRES
+        self.seen_detections: Set[str] = set()
+        self.stats = {
+            'total_detections_processed': 0,
+            'new_detections_sent': 0,
+            'duplicate_detections_skipped': 0,
+            'api_errors': 0,
+            'last_successful_poll': None,
+            'polling_started': datetime.now()
+        }
+        
+        # Setup logging
+        logging.basicConfig(level=logging.INFO)
+        self.logger = logging.getLogger(__name__)
+    
+    def create_detection_id(self, detection):
+        """Create unique ID for detection to avoid duplicates"""
+        key = f"{detection['latitude']}_{detection['longitude']}_{detection['timestamp']}_{detection['satellite']}"
+        return hashlib.md5(key.encode()).hexdigest()[:12]
+    
+    def parse_firms_datetime(self, acq_date, acq_time):
+        """Convert FIRMS date/time to ISO format"""
+        try:
+            if len(acq_time) == 3:
+                hour = "0" + acq_time[:1]
+                minute = acq_time[1:]
+            elif len(acq_time) == 4:
+                hour = acq_time[:2]
+                minute = acq_time[2:]
+            else:
+                hour = "12"
+                minute = "00"
+            
+            # Validate ranges
+            hour_int = min(23, max(0, int(hour)))
+            minute_int = min(59, max(0, int(minute)))
+            
+            return f"{acq_date}T{hour_int:02d}:{minute_int:02d}:00Z"
+        except:
+            return datetime.now().isoformat() + "Z"
+    
+    def parse_confidence(self, conf_str):
+        """Convert FIRMS confidence to numeric"""
+        if conf_str.lower() in ['l', 'low']:
+            return 0.3
+        elif conf_str.lower() in ['n', 'nominal']:
+            return 0.5
+        elif conf_str.lower() in ['h', 'high']:
+            return 0.8
+        else:
+            try:
+                return min(1.0, float(conf_str) / 100.0)
+            except:
+                return 0.5
+    
+    async def fetch_satellite_data(self, satellite_source, session):
+        """Fetch data from one satellite source"""
+        dataset_id = satellite_source["id"]
+        url = f"{FIRMS_BASE_URL}/csv/{self.api_key}/{dataset_id}/{CALIFORNIA_BOUNDS}/1"
+        
+        try:
+            async with session.get(url, timeout=30) as response:
+                if response.status == 200:
+                    csv_text = await response.text()
+                    
+                    detections = []
+                    csv_reader = csv.DictReader(io.StringIO(csv_text))
+                    
+                    for row in csv_reader:
+                        try:
+                            detection = {
+                                'latitude': float(row['latitude']),
+                                'longitude': float(row['longitude']),
+                                'confidence': self.parse_confidence(row['confidence']),
+                                'temperature': float(row.get('bright_ti4', 0)),
+                                'source': f"FIRMS_{row['satellite']}_{row['instrument']}",
+                                'timestamp': self.parse_firms_datetime(row['acq_date'], row['acq_time']),
+                                'satellite': row['satellite'],
+                                'instrument': row['instrument'],
+                                'frp': float(row.get('frp', 0))  # Fire Radiative Power
+                            }
+                            
+                            # Create unique ID
+                            detection['detection_id'] = self.create_detection_id(detection)
+                            detections.append(detection)
+                            
+                        except (ValueError, KeyError) as e:
+                            self.logger.warning(f"Skipping invalid detection: {e}")
+                            continue
+                    
+                    self.logger.info(f"Fetched {len(detections)} detections from {satellite_source['name']}")
+                    return detections
+                
+                elif response.status == 400:
+                    self.logger.error(f"Bad request for {dataset_id}: Check API key or parameters")
+                    return []
+                else:
+                    self.logger.error(f"API error {response.status} for {dataset_id}")
+                    return []
+                    
+        except Exception as e:
+            self.logger.error(f"Error fetching from {dataset_id}: {e}")
+            return []
+    
+    async def send_to_platform(self, detection, session):
+        """Send detection to platform"""
+        try:
+            # Format for platform API
+            platform_data = {
+                "latitude": detection['latitude'],
+                "longitude": detection['longitude'],
+                "confidence": detection['confidence'],
+                "temperature": detection['temperature'],
+                "source": detection['source'],
+                "timestamp": detection['timestamp']
+            }
+            
+            async with session.post(self.platform_url, json=platform_data, timeout=10) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    return result.get('incident_id')
+                else:
+                    error_text = await response.text()
+                    self.logger.error(f"Platform API error: {error_text}")
+                    return None
+                    
+        except Exception as e:
+            self.logger.error(f"Error sending to platform: {e}")
+            return None
+    
+    async def process_detections(self, all_detections):
+        """Process and deduplicate detections"""
+        new_detections = []
+        
+        for detection in all_detections:
+            detection_id = detection['detection_id']
+            
+            if detection_id not in self.seen_detections:
+                new_detections.append(detection)
+                self.seen_detections.add(detection_id)
+            else:
+                self.stats['duplicate_detections_skipped'] += 1
+        
+        self.logger.info(f"Found {len(new_detections)} new detections ({len(all_detections) - len(new_detections)} duplicates skipped)")
+        return new_detections
+    
+    async def poll_satellites(self):
+        """Poll all satellite sources for new detections"""
+        self.logger.info("Starting satellite polling cycle...")
+        
+        async with aiohttp.ClientSession() as session:
+            # Fetch from all satellite sources in parallel
+            tasks = []
+            for source in SATELLITE_SOURCES:
+                task = self.fetch_satellite_data(source, session)
+                tasks.append(task)
+            
+            # Wait for all sources to complete
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Combine all detections
+            all_detections = []
+            for result in results:
+                if isinstance(result, list):
+                    all_detections.extend(result)
+                else:
+                    self.logger.error(f"Satellite fetch error: {result}")
+                    self.stats['api_errors'] += 1
+            
+            self.stats['total_detections_processed'] += len(all_detections)
+            
+            if all_detections:
+                # Process and deduplicate
+                new_detections = await self.process_detections(all_detections)
+                
+                # Send new detections to platform
+                if new_detections:
+                    sent_count = 0
+                    for detection in new_detections:
+                        incident_id = await self.send_to_platform(detection, session)
+                        if incident_id:
+                            sent_count += 1
+                            if sent_count <= 3:  # Show first 3
+                                self.logger.info(f"Sent: {detection['source']} at {detection['latitude']:.4f}, {detection['longitude']:.4f} -> {incident_id}")
+                    
+                    self.stats['new_detections_sent'] += sent_count
+                    self.logger.info(f"Successfully sent {sent_count}/{len(new_detections)} new detections to platform")
+                else:
+                    self.logger.info("No new detections to send")
+            else:
+                self.logger.info("No fire detections found in current poll")
+            
+            self.stats['last_successful_poll'] = datetime.now()
+    
+    def cleanup_old_detections(self):
+        """Remove old detection IDs to prevent memory buildup"""
+        # Keep only last 24 hours of detection IDs
+        if len(self.seen_detections) > 10000:  # Arbitrary limit
+            # Clear half the set (simple cleanup)
+            old_size = len(self.seen_detections)
+            self.seen_detections = set(list(self.seen_detections)[5000:])
+            self.logger.info(f"Cleaned up detection cache: {old_size} -> {len(self.seen_detections)}")
+    
+    def print_stats(self):
+        """Print current statistics"""
+        runtime = datetime.now() - self.stats['polling_started']
+        print(f"\n{'='*60}")
+        print(f"[SATELLITE]  Real-Time Satellite Data Collector Stats")
+        print(f"{'='*60}")
+        print(f"⏱️  Runtime: {runtime}")
+        print(f"[BAR_CHART] Total detections processed: {self.stats['total_detections_processed']}")
+        print(f"🆕 New detections sent: {self.stats['new_detections_sent']}")
+        print(f"🔄 Duplicates skipped: {self.stats['duplicate_detections_skipped']}")
+        print(f"[X] API errors: {self.stats['api_errors']}")
+        print(f"🕐 Last successful poll: {self.stats['last_successful_poll']}")
+        print(f"💾 Detection cache size: {len(self.seen_detections)}")
+        print(f"{'='*60}\n")
+    
+    async def run_continuous(self):
+        """Run continuous satellite monitoring"""
+        self.logger.info(f"[SATELLITE]  Starting Real-Time NASA FIRMS Satellite Collector")
+        self.logger.info(f"[KEY] API Key: {self.api_key[:10]}...")
+        self.logger.info(f"[SATELLITE_ANTENNA] Platform: {self.platform_url}")
+        self.logger.info(f"[MAP]  Region: California")
+        self.logger.info(f"⏱️  Poll Interval: {POLL_INTERVAL_SECONDS} seconds")
+        self.logger.info(f"[SATELLITE]  Satellites: {len(SATELLITE_SOURCES)} sources")
+        
+        poll_count = 0
+        while True:
+            try:
+                poll_count += 1
+                self.logger.info(f"\n--- Polling Cycle #{poll_count} ---")
+                
+                await self.poll_satellites()
+                
+                # Print stats every 10 polls or on first poll
+                if poll_count == 1 or poll_count % 10 == 0:
+                    self.print_stats()
+                
+                # Cleanup old detections periodically
+                if poll_count % 50 == 0:
+                    self.cleanup_old_detections()
+                
+                # Wait for next poll
+                await asyncio.sleep(POLL_INTERVAL_SECONDS)
+                
+            except KeyboardInterrupt:
+                self.logger.info("Stopping satellite collector...")
+                break
+            except Exception as e:
+                self.logger.error(f"Unexpected error in polling cycle: {e}")
+                await asyncio.sleep(60)  # Wait 1 minute before retrying
+
+async def main():
+    """Main function"""
+    collector = RealTimeSatelliteCollector()
+    await collector.run_continuous()
+
+if __name__ == "__main__":
+    print("[FIRE] NASA FIRMS Real-Time Satellite Data Collector")
+    print("Press Ctrl+C to stop")
+    asyncio.run(main())

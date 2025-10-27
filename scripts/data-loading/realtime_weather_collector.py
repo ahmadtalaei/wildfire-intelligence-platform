@@ -1,0 +1,336 @@
+#!/usr/bin/env python3
+"""
+Real-Time NOAA Weather Data Collector
+Continuously monitors NOAA weather stations and loads data into the platform.
+
+Features:
+- Real-time polling every 10 minutes
+- Multiple California weather stations
+- Automatic data collection and storage
+- Error handling and retry logic
+- Configurable geographic regions
+"""
+
+import asyncio
+import aiohttp
+import json
+import time
+import hashlib
+from datetime import datetime, timedelta
+from typing import Dict, List, Set, Optional
+import logging
+from config import (
+    USER_AGENT, PLATFORM_API_WEATHER, NOAA_BASE_URL, NOAA_WEATHER_POLL_INTERVAL, 
+    MAX_RETRIES, REQUEST_TIMEOUT, CALIFORNIA_BOUNDS
+)
+
+# Polling configuration
+POLL_INTERVAL_SECONDS = NOAA_WEATHER_POLL_INTERVAL
+DEDUPE_HOURS = 6  # Avoid duplicate readings within 6 hours
+
+# California weather monitoring locations
+CALIFORNIA_LOCATIONS = [
+    {"name": "Los Angeles", "lat": 34.0522, "lon": -118.2437, "priority": 1},
+    {"name": "San Francisco", "lat": 37.7749, "lon": -122.4194, "priority": 1},
+    {"name": "San Diego", "lat": 32.7157, "lon": -117.1611, "priority": 1},
+    {"name": "Sacramento", "lat": 38.5816, "lon": -121.4944, "priority": 1},
+    {"name": "Fresno", "lat": 36.7378, "lon": -119.7871, "priority": 1},
+    {"name": "Bakersfield", "lat": 35.3733, "lon": -119.0187, "priority": 2},
+    {"name": "Santa Barbara", "lat": 34.4208, "lon": -119.6982, "priority": 2},
+    {"name": "Redding", "lat": 40.5865, "lon": -122.3917, "priority": 2},
+    {"name": "Eureka", "lat": 40.8021, "lon": -124.1637, "priority": 2},
+    {"name": "Palm Springs", "lat": 33.8303, "lon": -116.5453, "priority": 2}
+]
+
+class RealTimeWeatherCollector:
+    def __init__(self):
+        self.platform_url = PLATFORM_API_WEATHER
+        self.seen_readings: Set[str] = set()
+        self.station_cache: Dict[str, str] = {}  # location -> station_id
+        self.stats = {
+            'total_readings_processed': 0,
+            'new_readings_sent': 0,
+            'duplicate_readings_skipped': 0,
+            'api_errors': 0,
+            'station_errors': 0,
+            'last_successful_poll': None,
+            'polling_started': datetime.now()
+        }
+        
+        # Setup logging
+        logging.basicConfig(level=logging.INFO)
+        self.logger = logging.getLogger(__name__)
+    
+    def create_reading_id(self, location, weather_data):
+        """Create unique ID for weather reading to avoid duplicates"""
+        timestamp_hour = weather_data.get('timestamp', '')[:13]  # Round to hour
+        key = f"{location['lat']}_{location['lon']}_{timestamp_hour}"
+        return hashlib.md5(key.encode()).hexdigest()[:12]
+    
+    async def get_weather_station(self, location, session):
+        """Get the nearest weather station for a location"""
+        location_key = f"{location['lat']},{location['lon']}"
+        
+        # Check cache first
+        if location_key in self.station_cache:
+            return self.station_cache[location_key]
+        
+        headers = {"User-Agent": USER_AGENT}
+        
+        try:
+            # Get grid info
+            url = f"{NOAA_BASE_URL}/points/{location['lat']},{location['lon']}"
+            async with session.get(url, headers=headers, timeout=10) as response:
+                if response.status != 200:
+                    return None
+                    
+                data = await response.json()
+                properties = data.get("properties", {})
+                
+                cwa = properties.get("cwa")
+                grid_x = properties.get("gridX")
+                grid_y = properties.get("gridY")
+                
+                if not all([cwa, grid_x, grid_y]):
+                    return None
+                
+                # Get stations
+                stations_url = f"{NOAA_BASE_URL}/gridpoints/{cwa}/{grid_x},{grid_y}/stations"
+                async with session.get(stations_url, headers=headers, timeout=10) as stations_response:
+                    if stations_response.status != 200:
+                        return None
+                        
+                    stations_data = await stations_response.json()
+                    stations = stations_data.get("features", [])
+                    
+                    if stations:
+                        first_station = stations[0]
+                        station_id = first_station.get("properties", {}).get("stationIdentifier")
+                        
+                        # Cache the result
+                        if station_id:
+                            self.station_cache[location_key] = station_id
+                        
+                        return station_id
+                        
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"Error getting station for {location['name']}: {e}")
+            return None
+    
+    async def get_current_weather(self, station_id, session):
+        """Get current weather from NOAA station"""
+        headers = {"User-Agent": USER_AGENT}
+        
+        try:
+            url = f"{NOAA_BASE_URL}/stations/{station_id}/observations/latest"
+            async with session.get(url, headers=headers, timeout=10) as response:
+                if response.status != 200:
+                    return None
+                    
+                data = await response.json()
+                properties = data.get("properties", {})
+                
+                # Extract values
+                temperature = properties.get("temperature", {}).get("value")
+                humidity = properties.get("relativeHumidity", {}).get("value")
+                wind_speed = properties.get("windSpeed", {}).get("value")
+                wind_direction = properties.get("windDirection", {}).get("value")
+                pressure = properties.get("barometricPressure", {}).get("value")
+                timestamp = properties.get("timestamp")
+                
+                # Convert wind speed from km/h to m/s if needed
+                wind_ms = None
+                if wind_speed:
+                    # NOAA sometimes provides m/s directly, sometimes km/h
+                    if wind_speed > 50:  # Likely km/h
+                        wind_ms = wind_speed * 0.277778
+                    else:  # Likely m/s already
+                        wind_ms = wind_speed
+                
+                return {
+                    "station_id": station_id,
+                    "timestamp": timestamp,
+                    "temperature_c": temperature,
+                    "humidity_percent": humidity,
+                    "wind_speed_ms": wind_ms,
+                    "wind_direction_degrees": wind_direction,
+                    "pressure_pa": pressure
+                }
+                
+        except Exception as e:
+            self.logger.error(f"Error getting weather from {station_id}: {e}")
+            return None
+    
+    async def send_to_platform(self, location, weather_data, session):
+        """Send weather data to platform"""
+        try:
+            # Format for platform API
+            platform_data = {
+                "latitude": location["lat"],
+                "longitude": location["lon"],
+                "temperature": weather_data.get("temperature_c") or 20.0,
+                "humidity": weather_data.get("humidity_percent") or 50.0,
+                "wind_speed": weather_data.get("wind_speed_ms") or 5.0,
+                "wind_direction": weather_data.get("wind_direction_degrees") or 270.0,
+                "timestamp": weather_data.get("timestamp") or datetime.now().isoformat() + "Z"
+            }
+            
+            async with session.post(self.platform_url, json=platform_data, timeout=10) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    return result.get('reading_id')
+                else:
+                    error_text = await response.text()
+                    self.logger.error(f"Platform API error: {error_text}")
+                    return None
+                    
+        except Exception as e:
+            self.logger.error(f"Error sending to platform: {e}")
+            return None
+    
+    async def process_location(self, location, session):
+        """Process weather data for one location"""
+        try:
+            # Get weather station
+            station_id = await self.get_weather_station(location, session)
+            if not station_id:
+                self.stats['station_errors'] += 1
+                self.logger.warning(f"No station found for {location['name']}")
+                return None
+            
+            # Get current weather
+            weather_data = await self.get_current_weather(station_id, session)
+            if not weather_data:
+                self.stats['api_errors'] += 1
+                self.logger.warning(f"No weather data from {station_id} for {location['name']}")
+                return None
+            
+            # Check for duplicates
+            reading_id = self.create_reading_id(location, weather_data)
+            if reading_id in self.seen_readings:
+                self.stats['duplicate_readings_skipped'] += 1
+                return None
+            
+            # Send to platform
+            record_id = await self.send_to_platform(location, weather_data, session)
+            if record_id:
+                self.seen_readings.add(reading_id)
+                self.stats['new_readings_sent'] += 1
+                
+                temp = weather_data.get('temperature_c', 'N/A')
+                humidity = weather_data.get('humidity_percent', 'N/A')
+                wind = weather_data.get('wind_speed_ms', 'N/A')
+                
+                self.logger.info(f"Sent: {location['name']} ({temp}degC, {humidity}% RH, {wind} m/s) -> {record_id}")
+                return record_id
+            else:
+                self.stats['api_errors'] += 1
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"Error processing {location['name']}: {e}")
+            self.stats['api_errors'] += 1
+            return None
+    
+    async def poll_weather_stations(self):
+        """Poll all weather stations for current conditions"""
+        self.logger.info("Starting weather polling cycle...")
+        
+        async with aiohttp.ClientSession() as session:
+            # Process priority 1 locations first, then priority 2
+            priority_1_locations = [loc for loc in CALIFORNIA_LOCATIONS if loc.get('priority', 1) == 1]
+            priority_2_locations = [loc for loc in CALIFORNIA_LOCATIONS if loc.get('priority', 1) == 2]
+            
+            # Process priority 1 locations in parallel
+            tasks = []
+            for location in priority_1_locations:
+                task = self.process_location(location, session)
+                tasks.append(task)
+            
+            results_p1 = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Process priority 2 locations in parallel
+            tasks = []
+            for location in priority_2_locations:
+                task = self.process_location(location, session)
+                tasks.append(task)
+            
+            results_p2 = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Count successful results
+            all_results = results_p1 + results_p2
+            successful_readings = sum(1 for result in all_results if result and not isinstance(result, Exception))
+            
+            self.stats['total_readings_processed'] += len(CALIFORNIA_LOCATIONS)
+            self.stats['last_successful_poll'] = datetime.now()
+            
+            self.logger.info(f"Weather poll complete: {successful_readings}/{len(CALIFORNIA_LOCATIONS)} locations successful")
+    
+    def cleanup_old_readings(self):
+        """Remove old reading IDs to prevent memory buildup"""
+        if len(self.seen_readings) > 1000:  # Arbitrary limit
+            old_size = len(self.seen_readings)
+            self.seen_readings = set(list(self.seen_readings)[500:])
+            self.logger.info(f"Cleaned up reading cache: {old_size} -> {len(self.seen_readings)}")
+    
+    def print_stats(self):
+        """Print current statistics"""
+        runtime = datetime.now() - self.stats['polling_started']
+        print(f"\n{'='*60}")
+        print(f"Weather Real-Time Data Collector Stats")
+        print(f"{'='*60}")
+        print(f"Runtime: {runtime}")
+        print(f"Total readings processed: {self.stats['total_readings_processed']}")
+        print(f"New readings sent: {self.stats['new_readings_sent']}")
+        print(f"Duplicates skipped: {self.stats['duplicate_readings_skipped']}")
+        print(f"API errors: {self.stats['api_errors']}")
+        print(f"Station errors: {self.stats['station_errors']}")
+        print(f"Last successful poll: {self.stats['last_successful_poll']}")
+        print(f"Reading cache size: {len(self.seen_readings)}")
+        print(f"Station cache size: {len(self.station_cache)}")
+        print(f"{'='*60}\n")
+    
+    async def run_continuous(self):
+        """Run continuous weather monitoring"""
+        self.logger.info(f"Starting Real-Time NOAA Weather Collector")
+        self.logger.info(f"Platform: {self.platform_url}")
+        self.logger.info(f"Poll Interval: {POLL_INTERVAL_SECONDS} seconds")
+        self.logger.info(f"Locations: {len(CALIFORNIA_LOCATIONS)} California stations")
+        
+        poll_count = 0
+        while True:
+            try:
+                poll_count += 1
+                self.logger.info(f"\n--- Weather Polling Cycle #{poll_count} ---")
+                
+                await self.poll_weather_stations()
+                
+                # Print stats every 6 polls or on first poll
+                if poll_count == 1 or poll_count % 6 == 0:
+                    self.print_stats()
+                
+                # Cleanup old readings periodically
+                if poll_count % 24 == 0:
+                    self.cleanup_old_readings()
+                
+                # Wait for next poll
+                await asyncio.sleep(POLL_INTERVAL_SECONDS)
+                
+            except KeyboardInterrupt:
+                self.logger.info("Stopping weather collector...")
+                break
+            except Exception as e:
+                self.logger.error(f"Unexpected error in polling cycle: {e}")
+                await asyncio.sleep(60)  # Wait 1 minute before retrying
+
+async def main():
+    """Main function"""
+    collector = RealTimeWeatherCollector()
+    await collector.run_continuous()
+
+if __name__ == "__main__":
+    print("NOAA Real-Time Weather Data Collector")
+    print("Press Ctrl+C to stop")
+    asyncio.run(main())

@@ -1,0 +1,709 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Box,
+  Paper,
+  Typography,
+  Grid,
+  Card,
+  CardContent,
+  CardHeader,
+  Button,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Slider,
+  Switch,
+  FormControlLabel,
+  Chip,
+  IconButton,
+  Tooltip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Alert,
+  Tabs,
+  Tab,
+  Divider,
+} from '@mui/material';
+import {
+  Map,
+  BarChart,
+  Timeline,
+  PieChart,
+  ScatterPlot,
+  Layers,
+  Satellite,
+  FilterList,
+  Fullscreen,
+  Download,
+  Share,
+  Settings,
+  ZoomIn,
+  ZoomOut,
+  MyLocation,
+  Refresh,
+  TrendingUp,
+  ShowChart,
+  DonutLarge,
+} from '@mui/icons-material';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+  BarChart as RechartsBarChart,
+  Bar,
+  PieChart as RechartsPieChart,
+  Cell,
+  Pie,
+  ScatterChart,
+  Scatter,
+  Area,
+  AreaChart,
+} from 'recharts';
+
+interface MapLayer {
+  id: string;
+  name: string;
+  type: 'fire_perimeters' | 'risk_zones' | 'weather_stations' | 'elevation' | 'vegetation';
+  visible: boolean;
+  opacity: number;
+  color: string;
+}
+
+interface ChartData {
+  name: string;
+  value: number;
+  date?: string;
+  category?: string;
+}
+
+const VisualizationsPage: React.FC = () => {
+  const [selectedTab, setSelectedTab] = useState(0);
+  const [mapCenter, setMapCenter] = useState([34.0522, -118.2437]);
+  const [mapZoom, setMapZoom] = useState(8);
+  const [layers, setLayers] = useState<MapLayer[]>([]);
+  const [timeRange, setTimeRange] = useState('7d');
+  const [fullscreenOpen, setFullscreenOpen] = useState(false);
+  const [selectedChart, setSelectedChart] = useState('incidents_trend');
+
+  // Mock data for charts
+  const [chartData, setChartData] = useState({
+    incidents_trend: [
+      { name: 'Jan', value: 12, date: '2024-01' },
+      { name: 'Feb', value: 8, date: '2024-02' },
+      { name: 'Mar', value: 15, date: '2024-03' },
+      { name: 'Apr', value: 22, date: '2024-04' },
+      { name: 'May', value: 28, date: '2024-05' },
+      { name: 'Jun', value: 35, date: '2024-06' },
+      { name: 'Jul', value: 48, date: '2024-07' },
+      { name: 'Aug', value: 52, date: '2024-08' },
+      { name: 'Sep', value: 38, date: '2024-09' },
+    ],
+    risk_distribution: [
+      { name: 'Low Risk', value: 45, color: '#4caf50' },
+      { name: 'Medium Risk', value: 32, color: '#ff9800' },
+      { name: 'High Risk', value: 18, color: '#f44336' },
+      { name: 'Extreme Risk', value: 5, color: '#8b0000' },
+    ],
+    resource_deployment: [
+      { name: 'Ground Crews', value: 125 },
+      { name: 'Aircraft', value: 28 },
+      { name: 'Engines', value: 45 },
+      { name: 'Water Tenders', value: 32 },
+      { name: 'Dozers', value: 18 },
+    ],
+    weather_correlation: [
+      { temperature: 85, humidity: 15, incidents: 12 },
+      { temperature: 92, humidity: 8, incidents: 18 },
+      { temperature: 78, humidity: 25, incidents: 6 },
+      { temperature: 95, humidity: 5, incidents: 22 },
+      { temperature: 88, humidity: 12, incidents: 15 },
+      { temperature: 91, humidity: 7, incidents: 19 },
+    ]
+  });
+
+  useEffect(() => {
+    // Initialize map layers
+    const initialLayers: MapLayer[] = [
+      {
+        id: 'fire_perimeters',
+        name: 'Active Fire Perimeters',
+        type: 'fire_perimeters',
+        visible: true,
+        opacity: 0.7,
+        color: '#ff4444'
+      },
+      {
+        id: 'risk_zones',
+        name: 'Fire Risk Zones',
+        type: 'risk_zones',
+        visible: true,
+        opacity: 0.5,
+        color: '#ffaa00'
+      },
+      {
+        id: 'weather_stations',
+        name: 'Weather Stations',
+        type: 'weather_stations',
+        visible: false,
+        opacity: 1.0,
+        color: '#0088ff'
+      },
+      {
+        id: 'elevation',
+        name: 'Elevation',
+        type: 'elevation',
+        visible: false,
+        opacity: 0.6,
+        color: '#8b4513'
+      },
+      {
+        id: 'vegetation',
+        name: 'Vegetation Index',
+        type: 'vegetation',
+        visible: false,
+        opacity: 0.8,
+        color: '#228b22'
+      },
+    ];
+    setLayers(initialLayers);
+  }, []);
+
+  const toggleLayer = (layerId: string) => {
+    setLayers(prev => prev.map(layer =>
+      layer.id === layerId ? { ...layer, visible: !layer.visible } : layer
+    ));
+  };
+
+  const updateLayerOpacity = (layerId: string, opacity: number) => {
+    setLayers(prev => prev.map(layer =>
+      layer.id === layerId ? { ...layer, opacity: opacity / 100 } : layer
+    ));
+  };
+
+  const getLayerIcon = (type: string) => {
+    switch (type) {
+      case 'fire_perimeters': return '[FIRE]';
+      case 'risk_zones': return '[WARNING]';
+      case 'weather_stations': return '[THERMOMETER]';
+      case 'elevation': return '⛰️';
+      case 'vegetation': return '[HERB]';
+      default: return '[LOCATION_PIN]';
+    }
+  };
+
+  const renderChart = (chartType: string) => {
+    switch (chartType) {
+      case 'incidents_trend':
+        return (
+          <ResponsiveContainer width="100%" height={300}>
+            <AreaChart data={chartData.incidents_trend}>
+              <defs>
+                <linearGradient id="colorIncidents" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#ff4444" stopOpacity={0.8}/>
+                  <stop offset="95%" stopColor="#ff4444" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="name" />
+              <YAxis />
+              <CartesianGrid strokeDasharray="3 3" />
+              <RechartsTooltip />
+              <Area
+                type="monotone"
+                dataKey="value"
+                stroke="#ff4444"
+                fillOpacity={1}
+                fill="url(#colorIncidents)"
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        );
+
+      case 'risk_distribution':
+        return (
+          <ResponsiveContainer width="100%" height={300}>
+            <RechartsPieChart>
+              <Pie
+                data={chartData.risk_distribution}
+                cx="50%"
+                cy="50%"
+                labelLine={false}
+                label={({name, percent}) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                outerRadius={80}
+                fill="#8884d8"
+                dataKey="value"
+              >
+                {chartData.risk_distribution.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.color} />
+                ))}
+              </Pie>
+              <RechartsTooltip />
+            </RechartsPieChart>
+          </ResponsiveContainer>
+        );
+
+      case 'resource_deployment':
+        return (
+          <ResponsiveContainer width="100%" height={300}>
+            <RechartsBarChart data={chartData.resource_deployment}>
+              <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
+              <YAxis />
+              <CartesianGrid strokeDasharray="3 3" />
+              <RechartsTooltip />
+              <Bar dataKey="value" fill="#0088ff" />
+            </RechartsBarChart>
+          </ResponsiveContainer>
+        );
+
+      case 'weather_correlation':
+        return (
+          <ResponsiveContainer width="100%" height={300}>
+            <ScatterChart data={chartData.weather_correlation}>
+              <XAxis dataKey="temperature" name="Temperature" unit="degF" />
+              <YAxis dataKey="humidity" name="Humidity" unit="%" />
+              <CartesianGrid strokeDasharray="3 3" />
+              <RechartsTooltip cursor={{ strokeDasharray: '3 3' }} />
+              <Scatter name="Incidents" dataKey="incidents" fill="#ff4444" />
+            </ScatterChart>
+          </ResponsiveContainer>
+        );
+
+      default:
+        return <Typography>Chart not implemented</Typography>;
+    }
+  };
+
+  const TabPanel = ({ children, value, index }: { children: React.ReactNode, value: number, index: number }) => (
+    <div hidden={value !== index}>
+      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
+    </div>
+  );
+
+  return (
+    <Box sx={{ p: 3 }}>
+      {/* Header */}
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h4" gutterBottom>
+          Data Visualizations
+        </Typography>
+        <Typography variant="subtitle1" color="text.secondary">
+          Advanced geospatial mapping and analytical visualizations
+        </Typography>
+      </Box>
+
+      {/* Tabs */}
+      <Paper sx={{ mb: 3 }}>
+        <Tabs value={selectedTab} onChange={(e, newValue) => setSelectedTab(newValue)}>
+          <Tab icon={<Map />} label="Interactive Maps" />
+          <Tab icon={<BarChart />} label="Analytics Charts" />
+          <Tab icon={<Timeline />} label="Time Series" />
+          <Tab icon={<ScatterPlot />} label="Correlations" />
+        </Tabs>
+      </Paper>
+
+      {/* Interactive Maps Tab */}
+      <TabPanel value={selectedTab} index={0}>
+        <Grid container spacing={3}>
+          {/* Map Controls */}
+          <Grid item xs={12} md={3}>
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="h6" gutterBottom>
+                <Layers sx={{ mr: 1, verticalAlign: 'middle' }} />
+                Map Layers
+              </Typography>
+
+              {layers.map((layer) => (
+                <Box key={layer.id} sx={{ mb: 2, p: 1, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={layer.visible}
+                        onChange={() => toggleLayer(layer.id)}
+                        color="primary"
+                      />
+                    }
+                    label={
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <Typography variant="body2">{getLayerIcon(layer.type)}</Typography>
+                        <Typography variant="body2" sx={{ ml: 1 }}>
+                          {layer.name}
+                        </Typography>
+                      </Box>
+                    }
+                  />
+                  {layer.visible && (
+                    <Box sx={{ mt: 1, px: 1 }}>
+                      <Typography variant="caption" gutterBottom>
+                        Opacity: {Math.round(layer.opacity * 100)}%
+                      </Typography>
+                      <Slider
+                        value={layer.opacity * 100}
+                        onChange={(e, value) => updateLayerOpacity(layer.id, value as number)}
+                        size="small"
+                        min={0}
+                        max={100}
+                      />
+                    </Box>
+                  )}
+                </Box>
+              ))}
+
+              <Divider sx={{ my: 2 }} />
+
+              <Typography variant="h6" gutterBottom>
+                Map Controls
+              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <Button startIcon={<MyLocation />} size="small">
+                  Current Location
+                </Button>
+                <Button startIcon={<ZoomIn />} size="small">
+                  Zoom In
+                </Button>
+                <Button startIcon={<ZoomOut />} size="small">
+                  Zoom Out
+                </Button>
+                <Button startIcon={<Refresh />} size="small">
+                  Refresh Data
+                </Button>
+              </Box>
+            </Paper>
+          </Grid>
+
+          {/* Map Display */}
+          <Grid item xs={12} md={9}>
+            <Paper sx={{ p: 2, height: 600 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h6">
+                  California Fire Risk Map
+                </Typography>
+                <Box>
+                  <Tooltip title="Fullscreen">
+                    <IconButton onClick={() => setFullscreenOpen(true)}>
+                      <Fullscreen />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Download">
+                    <IconButton>
+                      <Download />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Settings">
+                    <IconButton>
+                      <Settings />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+              </Box>
+
+              {/* Simulated Map Display */}
+              <Box
+                sx={{
+                  height: 500,
+                  bgcolor: '#f5f5f5',
+                  border: 1,
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  position: 'relative',
+                  backgroundImage: 'linear-gradient(45deg, #e8f4f8 25%, transparent 25%), linear-gradient(135deg, #e8f4f8 25%, transparent 25%)',
+                  backgroundSize: '20px 20px',
+                  backgroundPosition: '0 0, 10px 10px'
+                }}
+              >
+                <Box sx={{ textAlign: 'center' }}>
+                  <Satellite sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
+                  <Typography variant="h6" color="text.secondary">
+                    Interactive Fire Risk Map
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Integrated satellite imagery, weather data, and fire perimeters
+                  </Typography>
+
+                  {/* Layer indicators */}
+                  <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center', flexWrap: 'wrap' }}>
+                    {layers.filter(l => l.visible).map(layer => (
+                      <Chip
+                        key={layer.id}
+                        label={layer.name}
+                        size="small"
+                        style={{ backgroundColor: layer.color, color: 'white' }}
+                      />
+                    ))}
+                  </Box>
+                </Box>
+
+                {/* Map overlay elements */}
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: 20,
+                    right: 20,
+                    bgcolor: 'background.paper',
+                    p: 1,
+                    borderRadius: 1,
+                    boxShadow: 1
+                  }}
+                >
+                  <Typography variant="caption" display="block">
+                    Zoom: {mapZoom}x
+                  </Typography>
+                  <Typography variant="caption" display="block">
+                    Center: {mapCenter[0].toFixed(4)}, {mapCenter[1].toFixed(4)}
+                  </Typography>
+                </Box>
+              </Box>
+            </Paper>
+          </Grid>
+        </Grid>
+      </TabPanel>
+
+      {/* Analytics Charts Tab */}
+      <TabPanel value={selectedTab} index={1}>
+        <Grid container spacing={3}>
+          {/* Chart Selection */}
+          <Grid item xs={12}>
+            <Paper sx={{ p: 2, mb: 2 }}>
+              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                <FormControl size="small" sx={{ minWidth: 200 }}>
+                  <InputLabel>Chart Type</InputLabel>
+                  <Select
+                    value={selectedChart}
+                    onChange={(e) => setSelectedChart(e.target.value)}
+                    label="Chart Type"
+                  >
+                    <MenuItem value="incidents_trend">Incidents Trend</MenuItem>
+                    <MenuItem value="risk_distribution">Risk Distribution</MenuItem>
+                    <MenuItem value="resource_deployment">Resource Deployment</MenuItem>
+                    <MenuItem value="weather_correlation">Weather Correlation</MenuItem>
+                  </Select>
+                </FormControl>
+
+                <FormControl size="small" sx={{ minWidth: 120 }}>
+                  <InputLabel>Time Range</InputLabel>
+                  <Select
+                    value={timeRange}
+                    onChange={(e) => setTimeRange(e.target.value)}
+                    label="Time Range"
+                  >
+                    <MenuItem value="24h">Last 24 Hours</MenuItem>
+                    <MenuItem value="7d">Last 7 Days</MenuItem>
+                    <MenuItem value="30d">Last 30 Days</MenuItem>
+                    <MenuItem value="1y">Last Year</MenuItem>
+                  </Select>
+                </FormControl>
+
+                <Button startIcon={<Refresh />} variant="outlined">
+                  Refresh
+                </Button>
+                <Button startIcon={<Download />} variant="outlined">
+                  Export
+                </Button>
+              </Box>
+            </Paper>
+          </Grid>
+
+          {/* Main Chart */}
+          <Grid item xs={12} lg={8}>
+            <Card>
+              <CardHeader
+                title="Fire Incidents Analytics"
+                subheader={`Data visualization for ${timeRange}`}
+                action={
+                  <IconButton>
+                    <Fullscreen />
+                  </IconButton>
+                }
+              />
+              <CardContent>
+                {renderChart(selectedChart)}
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Chart Summary */}
+          <Grid item xs={12} lg={4}>
+            <Paper sx={{ p: 2, height: 'fit-content' }}>
+              <Typography variant="h6" gutterBottom>
+                Chart Insights
+              </Typography>
+
+              {selectedChart === 'incidents_trend' && (
+                <Box>
+                  <Alert severity="warning" sx={{ mb: 2 }}>
+                    Peak fire activity observed in July-August
+                  </Alert>
+                  <Typography variant="body2" paragraph>
+                    * 52 incidents in August (highest)
+                    * 38% increase from previous year
+                    * Trend shows seasonal correlation
+                  </Typography>
+                </Box>
+              )}
+
+              {selectedChart === 'risk_distribution' && (
+                <Box>
+                  <Alert severity="error" sx={{ mb: 2 }}>
+                    23% of areas in high/extreme risk categories
+                  </Alert>
+                  <Typography variant="body2" paragraph>
+                    * 5% extreme risk zones require immediate attention
+                    * 18% high risk zones need monitoring
+                    * Focus resources on critical areas
+                  </Typography>
+                </Box>
+              )}
+
+              {selectedChart === 'resource_deployment' && (
+                <Box>
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    Ground crews represent 52% of deployment
+                  </Alert>
+                  <Typography variant="body2" paragraph>
+                    * 125 ground crew personnel active
+                    * 28 aircraft units available
+                    * Resource allocation optimization needed
+                  </Typography>
+                </Box>
+              )}
+
+              {selectedChart === 'weather_correlation' && (
+                <Box>
+                  <Alert severity="warning" sx={{ mb: 2 }}>
+                    Strong correlation between temperature/humidity and incidents
+                  </Alert>
+                  <Typography variant="body2" paragraph>
+                    * Higher temperatures correlate with more incidents
+                    * Low humidity increases fire risk significantly
+                    * Weather predictions crucial for resource planning
+                  </Typography>
+                </Box>
+              )}
+
+              <Divider sx={{ my: 2 }} />
+
+              <Typography variant="subtitle2" gutterBottom>
+                Quick Actions
+              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <Button size="small" startIcon={<Share />}>
+                  Share Chart
+                </Button>
+                <Button size="small" startIcon={<Download />}>
+                  Download Data
+                </Button>
+                <Button size="small" startIcon={<Settings />}>
+                  Chart Settings
+                </Button>
+              </Box>
+            </Paper>
+          </Grid>
+        </Grid>
+      </TabPanel>
+
+      {/* Time Series Tab */}
+      <TabPanel value={selectedTab} index={2}>
+        <Grid container spacing={3}>
+          <Grid item xs={12}>
+            <Card>
+              <CardHeader
+                title="Fire Incidents Timeline"
+                subheader="Historical trend analysis and forecasting"
+              />
+              <CardContent>
+                <ResponsiveContainer width="100%" height={400}>
+                  <LineChart data={chartData.incidents_trend}>
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <RechartsTooltip />
+                    <Line
+                      type="monotone"
+                      dataKey="value"
+                      stroke="#ff4444"
+                      strokeWidth={3}
+                      dot={{ fill: '#ff4444', strokeWidth: 2, r: 6 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+      </TabPanel>
+
+      {/* Correlations Tab */}
+      <TabPanel value={selectedTab} index={3}>
+        <Grid container spacing={3}>
+          <Grid item xs={12}>
+            <Card>
+              <CardHeader
+                title="Weather vs Fire Incidents Correlation"
+                subheader="Analyzing relationships between environmental factors and fire occurrence"
+              />
+              <CardContent>
+                {renderChart('weather_correlation')}
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  Scatter plot shows correlation between temperature, humidity, and fire incidents.
+                  Higher temperatures and lower humidity correlate with increased fire activity.
+                </Alert>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+      </TabPanel>
+
+      {/* Fullscreen Dialog */}
+      <Dialog
+        open={fullscreenOpen}
+        onClose={() => setFullscreenOpen(false)}
+        maxWidth="xl"
+        fullWidth
+        PaperProps={{
+          sx: { height: '90vh' }
+        }}
+      >
+        <DialogTitle>
+          California Fire Risk Map - Fullscreen
+        </DialogTitle>
+        <DialogContent>
+          <Box
+            sx={{
+              height: '100%',
+              bgcolor: '#f5f5f5',
+              border: 1,
+              borderColor: 'divider',
+              borderRadius: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundImage: 'linear-gradient(45deg, #e8f4f8 25%, transparent 25%), linear-gradient(135deg, #e8f4f8 25%, transparent 25%)',
+              backgroundSize: '40px 40px',
+              backgroundPosition: '0 0, 20px 20px'
+            }}
+          >
+            <Typography variant="h4" color="text.secondary">
+              Fullscreen Interactive Map View
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setFullscreenOpen(false)}>Close</Button>
+          <Button variant="contained" startIcon={<Download />}>
+            Export Map
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+};
+
+export default VisualizationsPage;

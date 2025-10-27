@@ -1,0 +1,359 @@
+{
+  "id": null,
+  "uid": "latency-fidelity-v2",
+  "title": "[TROPHY] Challenge 1: Enhanced Latency & Fidelity Metrics",
+  "tags": ["challenge1", "latency", "fidelity", "ingestion", "kafka", "validation", "competition"],
+  "style": "dark",
+  "timezone": "browser",
+  "refresh": "15s",
+  "schemaVersion": 27,
+  "version": 2,
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "title": "🏆 CHALLENGE 1: LATENCY & FIDELITY DASHBOARD (50 Points)",
+      "type": "text",
+      "gridPos": {"h": 3, "w": 24, "x": 0, "y": 0},
+      "id": 100,
+      "options": {
+        "content": "## Comprehensive Data Processing Latency & Quality Metrics\n\n**Tracking**: Ingestion Latency | Kafka Lag | Data Validation | Success Rates | Source-Level Performance\n\n**Updated**: Real-time (15s refresh)",
+        "mode": "markdown"
+      }
+    },
+    {
+      "title": "⚡ End-to-End Latency",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 3},
+      "id": 1,
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "thresholds": {
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 2000},
+              {"color": "red", "value": 5000}
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "avg(ingestion_latency_seconds{service=\"data-ingestion-service\"}) * 1000",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area"
+      }
+    },
+    {
+      "title": "📊 Kafka Consumer Lag",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 3},
+      "id": 2,
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 100},
+              {"color": "red", "value": 1000}
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(kafka_consumer_lag{service=\"data-storage-service\"})",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area"
+      }
+    },
+    {
+      "title": "✅ Validation Success Rate",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 8, "y": 3},
+      "id": 3,
+      "datasource": "PostgreSQL-Wildfire",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 95},
+              {"color": "green", "value": 99}
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT (COUNT(*) FILTER (WHERE data_quality = 'valid' OR confidence >= 0.7)::FLOAT / COUNT(*) * 100) as value FROM fire_incidents WHERE created_at >= NOW() - INTERVAL '1 hour'",
+          "format": "table",
+          "rawQuery": true
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area"
+      }
+    },
+    {
+      "title": "🔥 Active Fire Data Sources",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 12, "y": 3},
+      "id": 4,
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 10},
+              {"color": "green", "value": 15}
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "count(count by (source_id) (rate(ingestion_records_total[5m]) > 0))",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "background"
+      }
+    },
+    {
+      "title": "📈 Ingestion Rate",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 16, "y": 3},
+      "id": 5,
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "rec/min",
+          "thresholds": {
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 100},
+              {"color": "green", "value": 1000}
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ingestion_records_total[5m])) * 60",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area"
+      }
+    },
+    {
+      "title": "🎯 Data Quality Score",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 20, "y": 3},
+      "id": 6,
+      "datasource": "PostgreSQL-Wildfire",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 0.7},
+              {"color": "green", "value": 0.9}
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT AVG(confidence) as value FROM fire_incidents WHERE created_at >= NOW() - INTERVAL '1 hour'",
+          "format": "table",
+          "rawQuery": true
+        }
+      ],
+      "options": {
+        "colorMode": "background"
+      }
+    },
+    {
+      "title": "⏱️ Ingestion Latency by Connector",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 7},
+      "id": 7,
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "avg by (connector) (ingestion_latency_seconds{service=\"data-ingestion-service\"}) * 1000",
+          "legendFormat": "{{connector}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "📉 Kafka Lag by Topic",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 7},
+      "id": 8,
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "showPoints": "never"
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (topic) (kafka_consumer_lag)",
+          "legendFormat": "{{topic}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "✅ Validation Success Rate by Source",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 15},
+      "id": 9,
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "max": 1,
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 20
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (source_id) (rate(validation_success_total[5m])) / sum by (source_id) (rate(validation_attempts_total[5m]))",
+          "legendFormat": "{{source_id}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "🔍 Data Quality Score by Source",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 15},
+      "id": 10,
+      "datasource": "PostgreSQL-Wildfire",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 15
+          }
+        }
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT $__timeGroupAlias(created_at, '5m'), COALESCE(source, 'unknown') as metric, AVG(confidence) as value FROM fire_incidents WHERE $__timeFilter(created_at) GROUP BY 1, 2 ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true
+        }
+      ]
+    },
+    {
+      "title": "📋 Source Performance Metrics",
+      "type": "table",
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 23},
+      "id": 11,
+      "datasource": "PostgreSQL-Wildfire",
+      "targets": [
+        {
+          "rawSql": "SELECT COALESCE(source, 'unknown') as \"Source\", COUNT(*) as \"Records (1h)\", ROUND(AVG(confidence)::numeric, 3) as \"Avg Quality\", COUNT(*) FILTER (WHERE confidence >= 0.7) as \"Valid Records\", (COUNT(*) FILTER (WHERE confidence >= 0.7)::FLOAT / COUNT(*) * 100)::INTEGER as \"Success Rate %\", MIN(created_at) as \"First Record\", MAX(created_at) as \"Last Record\" FROM fire_incidents WHERE created_at >= NOW() - INTERVAL '1 hour' GROUP BY 1 ORDER BY 2 DESC",
+          "format": "table",
+          "rawQuery": true
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [{"displayName": "Records (1h)", "desc": true}]
+      }
+    },
+    {
+      "title": "🚨 Validation Failures by Type",
+      "type": "bargauge",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 33},
+      "id": 12,
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 10},
+              {"color": "red", "value": 100}
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (failure_type) (increase(validation_failures_total[1h]))",
+          "legendFormat": "{{failure_type}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal"
+      }
+    },
+    {
+      "title": "⚙️ Processing Time Distribution",
+      "type": "heatmap",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 33},
+      "id": 13,
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(rate(ingestion_latency_bucket[5m])) by (le)",
+          "format": "heatmap",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

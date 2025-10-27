@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wildfire Intelligence Platform - Live Architecture</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            color: white;
+            overflow-x: hidden;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            padding: 20px;
+            position: relative;
+        }
+
+        .header {
+            text-align: center;
+            padding: 30px 0;
+            position: relative;
+            z-index: 10;
+        }
+
+        .header h1 {
+            font-size: 3em;
+            background: linear-gradient(45deg, #f093fb 0%, #f5576c 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+            animation: glow 3s ease-in-out infinite;
+        }
+
+        @keyframes glow {
+            0%, 100% { filter: brightness(1) drop-shadow(0 0 20px rgba(240, 147, 251, 0.3)); }
+            50% { filter: brightness(1.2) drop-shadow(0 0 40px rgba(245, 87, 108, 0.5)); }
+        }
+
+        .header .subtitle {
+            font-size: 1.2em;
+            color: #a0a0a0;
+            margin-bottom: 20px;
+        }
+
+        .live-badge {
+            display: inline-block;
+            background: #ff4444;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+            animation: pulse 2s ease-in-out infinite;
+            box-shadow: 0 0 20px rgba(255, 68, 68, 0.5);
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.9; }
+        }
+
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+            z-index: 10;
+            position: relative;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            transform: rotate(45deg);
+            animation: shine 3s ease-in-out infinite;
+        }
+
+        @keyframes shine {
+            0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
+            100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .stat-card h4 {
+            font-size: 0.85em;
+            color: #a0a0a0;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .stat-value {
+            font-size: 2.2em;
+            font-weight: bold;
+            background: linear-gradient(45deg, #f093fb, #f5576c);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            position: relative;
+            z-index: 1;
+        }
+
+        .stat-unit {
+            font-size: 0.5em;
+            color: #888;
+            margin-left: 5px;
+        }
+
+        .architecture-canvas {
+            position: relative;
+            width: 100%;
+            min-height: 1200px;
+            margin: 30px 0;
+        }
+
+        .layer {
+            position: relative;
+            margin-bottom: 60px;
+            padding: 30px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .layer-title {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            display: inline-block;
+        }
+
+        .nodes {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .node {
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid;
+            border-radius: 15px;
+            padding: 20px;
+            position: relative;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+
+        .node::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+
+        .node:hover::after {
+            width: 300px;
+            height: 300px;
+        }
+
+        .node:hover {
+            transform: translateY(-5px) scale(1.02);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        .node.active {
+            animation: nodeGlow 2s ease-in-out infinite;
+        }
+
+        @keyframes nodeGlow {
+            0%, 100% { box-shadow: 0 0 20px currentColor; }
+            50% { box-shadow: 0 0 40px currentColor, 0 0 60px currentColor; }
+        }
+
+        .node h3 {
+            font-size: 1.1em;
+            margin-bottom: 10px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .node p {
+            font-size: 0.85em;
+            color: #aaa;
+            line-height: 1.4;
+            position: relative;
+            z-index: 1;
+        }
+
+        .node-metric {
+            margin-top: 10px;
+            padding: 8px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            font-size: 0.9em;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Layer specific colors */
+        .layer1 .node { border-color: #e74c3c; color: #e74c3c; }
+        .layer2 .node { border-color: #e67e22; color: #e67e22; }
+        .layer3 .node { border-color: #f39c12; color: #f39c12; }
+        .layer4 .node { border-color: #27ae60; color: #27ae60; }
+        .layer5 .node { border-color: #e84393; color: #e84393; }
+        .layer6 .node { border-color: #00b894; color: #00b894; }
+        .layer7 .node { border-color: #0984e3; color: #0984e3; }
+        .layer8 .node { border-color: #6c5ce7; color: #6c5ce7; }
+
+        /* Animated particles */
+        .particle {
+            position: fixed;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 100;
+            animation: particleFlow 3s linear infinite;
+            box-shadow: 0 0 10px currentColor;
+        }
+
+        @keyframes particleFlow {
+            0% { transform: translateY(0) scale(1); opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { transform: translateY(800px) scale(0.5); opacity: 0; }
+        }
+
+        .particle.fire { background: #e74c3c; }
+        .particle.weather { background: #3498db; }
+        .particle.iot { background: #f39c12; }
+
+        /* Connection lines */
+        .connection-line {
+            position: absolute;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.05));
+            width: 2px;
+            left: 50%;
+            transform: translateX(-50%);
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .flow-indicator {
+            position: absolute;
+            left: 50%;
+            width: 10px;
+            height: 10px;
+            background: white;
+            border-radius: 50%;
+            transform: translateX(-50%);
+            animation: flowDown 2s linear infinite;
+            box-shadow: 0 0 20px white;
+        }
+
+        @keyframes flowDown {
+            0% { top: 0; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { top: 100%; opacity: 0; }
+        }
+
+        .legend {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            border-radius: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            z-index: 1000;
+            max-width: 300px;
+        }
+
+        .legend h4 {
+            margin-bottom: 15px;
+            font-size: 1.1em;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            font-size: 0.9em;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 10px;
+            border: 2px solid white;
+        }
+
+        .control-panel {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            border-radius: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            z-index: 1000;
+        }
+
+        .control-panel button {
+            background: linear-gradient(45deg, #f093fb, #f5576c);
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            margin: 5px 0;
+            width: 100%;
+            transition: all 0.3s ease;
+        }
+
+        .control-panel button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(245, 87, 108, 0.4);
+        }
+
+        .back-link {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 12px 24px;
+            border-radius: 8px;
+            color: white;
+            text-decoration: none;
+            font-weight: bold;
+            z-index: 1000;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .back-link:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateX(-5px);
+        }
+
+        .tooltip {
+            position: fixed;
+            background: rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            font-size: 0.9em;
+            max-width: 300px;
+            pointer-events: none;
+            z-index: 10000;
+            display: none;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .throughput-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-left: 10px;
+            animation: blink 1s ease-in-out infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .throughput-indicator.high { background: #2ecc71; }
+        .throughput-indicator.medium { background: #f39c12; }
+        .throughput-indicator.low { background: #e74c3c; }
+
+        /* Background animation */
+        .bg-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        .bg-particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            animation: bgFloat 20s linear infinite;
+        }
+
+        @keyframes bgFloat {
+            0% {
+                transform: translateY(100vh) translateX(0) scale(0);
+                opacity: 0;
+            }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% {
+                transform: translateY(-100vh) translateX(100px) scale(1);
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-animation" id="bgAnimation"></div>
+
+    <a href="/" class="back-link">← Back to Dashboard</a>
+
+    <div class="control-panel">
+        <h4 style="margin-bottom: 15px;">Controls</h4>
+        <button onclick="toggleParticles()">Toggle Flow Animation</button>
+        <button onclick="toggleMetrics()">Toggle Live Metrics</button>
+        <button onclick="resetView()">Reset View</button>
+    </div>
+
+    <div class="legend">
+        <h4>Data Flow Types</h4>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #e74c3c;"></div>
+            <span>Fire Detection Data</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #3498db;"></div>
+            <span>Weather Data</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #f39c12;"></div>
+            <span>IoT Sensor Data</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #2ecc71;"></div>
+            <span>Processed Data</span>
+        </div>
+    </div>
+
+    <div class="tooltip" id="tooltip"></div>
+
+    <div class="container">
+        <div class="header">
+            <h1>🔥 Wildfire Intelligence Platform</h1>
+            <p class="subtitle">Live System Architecture Visualization</p>
+            <span class="live-badge">● LIVE</span>
+        </div>
+
+        <div class="stats-bar">
+            <div class="stat-card">
+                <h4>Events Processed</h4>
+                <div class="stat-value" id="eventsProcessed">0<span class="stat-unit">/sec</span></div>
+            </div>
+            <div class="stat-card">
+                <h4>Active Connections</h4>
+                <div class="stat-value" id="activeConnections">0</div>
+            </div>
+            <div class="stat-card">
+                <h4>System Latency</h4>
+                <div class="stat-value" id="systemLatency">0<span class="stat-unit">ms</span></div>
+            </div>
+            <div class="stat-card">
+                <h4>Kafka Topics</h4>
+                <div class="stat-value">8</div>
+            </div>
+            <div class="stat-card">
+                <h4>Storage Used</h4>
+                <div class="stat-value" id="storageUsed">0<span class="stat-unit">GB</span></div>
+            </div>
+            <div class="stat-card">
+                <h4>Active Users</h4>
+                <div class="stat-value" id="activeUsers">0</div>
+            </div>
+        </div>
+
+        <div class="architecture-canvas" id="architectureCanvas">
+            <!-- Layer 1: Data Sources -->
+            <div class="layer layer1">
+                <div class="layer-title">🌍 LAYER 1: External Data Sources</div>
+                <div class="nodes">
+                    <div class="node active" data-info="NASA FIRMS provides real-time fire detection data from MODIS and VIIRS satellites. Updates every 30 seconds." data-metric="Processing">
+                        <h3>NASA FIRMS</h3>
+                        <p>Satellite Fire Detection</p>
+                        <div class="node-metric">
+                            <span id="nasaThroughput">0</span> events/sec
+                            <span class="throughput-indicator high"></span>
+                        </div>
+                    </div>
+                    <div class="node active" data-info="NOAA Weather API provides meteorological data with 8 Kafka partitions for high throughput." data-metric="Streaming">
+                        <h3>NOAA Weather</h3>
+                        <p>Meteorological Data</p>
+                        <div class="node-metric">
+                            <span id="noaaThroughput">0</span> events/sec
+                            <span class="throughput-indicator high"></span>
+                        </div>
+                    </div>
+                    <div class="node active" data-info="Copernicus ERA5 delivers weather reanalysis data every 6 hours in GRIB2 format." data-metric="Batch">
+                        <h3>Copernicus ERA5</h3>
+                        <p>Weather Reanalysis</p>
+                        <div class="node-metric">Batch: 6-hourly</div>
+                    </div>
+                    <div class="node active" data-info="IoT sensors via MQTT protocol provide air quality data with 12 Kafka partitions." data-metric="Live">
+                        <h3>IoT Sensors</h3>
+                        <p>MQTT Air Quality</p>
+                        <div class="node-metric">
+                            <span id="iotThroughput">0</span> sensors
+                            <span class="throughput-indicator medium"></span>
+                        </div>
+                    </div>
+                    <div class="node active" data-info="Landsat thermal imagery provides daily satellite images in GeoTIFF format." data-metric="Daily">
+                        <h3>Landsat Thermal</h3>
+                        <p>Satellite Imagery</p>
+                        <div class="node-metric">Daily GeoTIFF</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Layer 2: Ingestion -->
+            <div class="layer layer2">
+                <div class="layer-title">⚙️ LAYER 2: Ingestion & Validation</div>
+                <div class="nodes">
+                    <div class="node active" data-info="Avro Schema Validator ensures data quality with 4 predefined schemas." data-metric="Validation">
+                        <h3>Avro Validator</h3>
+                        <p>Schema Validation</p>
+                        <div class="node-metric">
+                            <span id="validationRate">0</span>% pass rate
+                        </div>
+                    </div>
+                    <div class="node active" data-info="Dead Letter Queue handles failed messages with exponential backoff retry." data-metric="Recovery">
+                        <h3>Dead Letter Queue</h3>
+                        <p>Error Recovery</p>
+                        <div class="node-metric">
+                            <span id="dlqMessages">0</span> in queue
+                        </div>
+                    </div>
+                    <div class="node active" data-info="Data Quality Engine checks completeness and consistency of incoming data." data-metric="Quality">
+                        <h3>Quality Engine</h3>
+                        <p>Data Quality Checks</p>
+                        <div class="node-metric">
+                            Score: <span id="qualityScore">0</span>%
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Layer 3: Kafka -->
+            <div class="layer layer3">
+                <div class="layer-title">📨 LAYER 3: Event Streaming (Apache Kafka)</div>
+                <div class="nodes">
+                    <div class="node active" data-info="Kafka cluster with 8 topics and 25 total partitions for high-throughput streaming." data-metric="Streaming">
+                        <h3>Apache Kafka</h3>
+                        <p>Message Broker</p>
+                        <div class="node-metric">
+                            <span id="kafkaThroughput">0</span> msg/sec
+                            <span class="throughput-indicator high"></span>
+                        </div>
+                    </div>
+                    <div class="node active" data-info="ZSTD compression reduces message size and latency by 20-40%." data-metric="Compression">
+                        <h3>ZSTD Compression</h3>
+                        <p>Message Optimization</p>
+                        <div class="node-metric">78% compression</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Layer 4: Storage -->
+            <div class="layer layer4">
+                <div class="layer-title">💾 LAYER 4: Multi-Tier Storage</div>
+                <div class="nodes">
+                    <div class="node active" data-info="HOT tier on PostgreSQL+PostGIS for real-time queries under 100ms." data-metric="Hot">
+                        <h3>HOT Tier</h3>
+                        <p>PostgreSQL (0-7 days)</p>
+                        <div class="node-metric">
+                            <span id="hotLatency">0</span>ms latency
+                            <span class="throughput-indicator high"></span>
+                        </div>
+                    </div>
+                    <div class="node active" data-info="WARM tier on MinIO with Parquet format for analytical queries under 500ms." data-metric="Warm">
+                        <h3>WARM Tier</h3>
+                        <p>MinIO Parquet (7-90 days)</p>
+                        <div class="node-metric">
+                            <span id="warmLatency">0</span>ms latency
+                        </div>
+                    </div>
+                    <div class="node active" data-info="COLD tier on S3 Standard-IA for compliance queries under 5 seconds." data-metric="Cold">
+                        <h3>COLD Tier</h3>
+                        <p>S3 Standard-IA (90-365 days)</p>
+                        <div class="node-metric">$0.004/GB/month</div>
+                    </div>
+                    <div class="node active" data-info="ARCHIVE tier on Glacier Deep Archive for 7-year retention compliance." data-metric="Archive">
+                        <h3>ARCHIVE Tier</h3>
+                        <p>Glacier Deep Archive (365+ days)</p>
+                        <div class="node-metric">$0.00099/GB/month</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Layer 5: Security -->
+            <div class="layer layer5">
+                <div class="layer-title">🔐 LAYER 5: API Gateway & Security</div>
+                <div class="nodes">
+                    <div class="node active" data-info="Kong API Gateway handles rate limiting and request validation." data-metric="Gateway">
+                        <h3>Kong Gateway</h3>
+                        <p>API Management</p>
+                        <div class="node-metric">
+                            <span id="apiRequests">0</span> req/sec
+                        </div>
+                    </div>
+                    <div class="node active" data-info="5-role RBAC with OAuth2/OIDC authentication and MFA support." data-metric="Security">
+                        <h3>RBAC + MFA</h3>
+                        <p>Access Control</p>
+                        <div class="node-metric">5 roles defined</div>
+                    </div>
+                    <div class="node active" data-info="Comprehensive audit logging for FISMA compliance." data-metric="Compliance">
+                        <h3>Audit Logging</h3>
+                        <p>FISMA Compliant</p>
+                        <div class="node-metric">
+                            <span id="auditEvents">0</span> events logged
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Layer 6: Data Clearing House -->
+            <div class="layer layer6">
+                <div class="layer-title">🏢 LAYER 6: Data Clearing House</div>
+                <div class="nodes">
+                    <div class="node active" data-info="45+ REST API endpoints with FastAPI auto-documentation." data-metric="API">
+                        <h3>Data Clearing House</h3>
+                        <p>REST API (Port 8006)</p>
+                        <div class="node-metric">45+ endpoints</div>
+                    </div>
+                    <div class="node active" data-info="Redis cache with high hit rate and 15-minute TTL." data-metric="Cache">
+                        <h3>Redis Cache</h3>
+                        <p>Session Management</p>
+                        <div class="node-metric">
+                            <span id="cacheHitRate">0</span>% hit rate
+                        </div>
+                    </div>
+                    <div class="node active" data-info="Export service supporting CSV, JSON, GeoJSON, Parquet, and Shapefile formats." data-metric="Export">
+                        <h3>Export Service</h3>
+                        <p>Multi-Format</p>
+                        <div class="node-metric">5 formats</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Layer 7: Dashboards -->
+            <div class="layer layer7">
+                <div class="layer-title">👥 LAYER 7: User Dashboards</div>
+                <div class="nodes">
+                    <div class="node active" data-info="Fire Chief Dashboard with 8 widgets for real-time operations." data-metric="Dashboard">
+                        <h3>Fire Chief</h3>
+                        <p>Real-Time Operations</p>
+                        <div class="node-metric">Port 3001</div>
+                    </div>
+                    <div class="node active" data-info="Data Analyst Portal with 10 widgets for historical analysis." data-metric="Dashboard">
+                        <h3>Data Analyst</h3>
+                        <p>Historical Analysis</p>
+                        <div class="node-metric">Port 3002</div>
+                    </div>
+                    <div class="node active" data-info="Data Scientist Workbench with 12 widgets and ML tools." data-metric="Dashboard">
+                        <h3>Data Scientist</h3>
+                        <p>ML & Analytics</p>
+                        <div class="node-metric">Port 3003</div>
+                    </div>
+                    <div class="node active" data-info="Admin Console for user management and system configuration." data-metric="Dashboard">
+                        <h3>Admin Console</h3>
+                        <p>System Management</p>
+                        <div class="node-metric">Port 3004</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Layer 8: Monitoring -->
+            <div class="layer layer8">
+                <div class="layer-title">📊 LAYER 8: Monitoring & Operations</div>
+                <div class="nodes">
+                    <div class="node active" data-info="Grafana dashboards with 33+ KPIs across 5 dashboards." data-metric="Monitoring">
+                        <h3>Grafana</h3>
+                        <p>Visualization (Port 3010)</p>
+                        <div class="node-metric">33+ KPIs</div>
+                    </div>
+                    <div class="node active" data-info="Prometheus for metrics collection and SLA tracking." data-metric="Metrics">
+                        <h3>Prometheus</h3>
+                        <p>Metrics Collection</p>
+                        <div class="node-metric">
+                            <span id="prometheusMetrics">0</span> metrics
+                        </div>
+                    </div>
+                    <div class="node active" data-info="ELK stack for centralized logging with 90-day retention." data-metric="Logging">
+                        <h3>ELK Stack</h3>
+                        <p>Centralized Logging</p>
+                        <div class="node-metric">
+                            <span id="logVolume">0</span> logs/sec
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        let particlesEnabled = true;
+        let metricsEnabled = true;
+        const API_BASE = 'http://localhost:8001';
+
+        // Initialize background animation
+        function initBackgroundAnimation() {
+            const bgAnimation = document.getElementById('bgAnimation');
+            for (let i = 0; i < 50; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'bg-particle';
+                particle.style.left = Math.random() * 100 + '%';
+                particle.style.animationDelay = Math.random() * 20 + 's';
+                particle.style.animationDuration = (15 + Math.random() * 10) + 's';
+                bgAnimation.appendChild(particle);
+            }
+        }
+
+        // Create flowing particles
+        function createParticle() {
+            if (!particlesEnabled) return;
+
+            const types = ['fire', 'weather', 'iot'];
+            const type = types[Math.floor(Math.random() * types.length)];
+
+            const particle = document.createElement('div');
+            particle.className = `particle ${type}`;
+            particle.style.left = (20 + Math.random() * 60) + '%';
+            particle.style.top = '100px';
+
+            document.body.appendChild(particle);
+
+            setTimeout(() => particle.remove(), 3000);
+        }
+
+        // Update live metrics
+        async function updateMetrics() {
+            if (!metricsEnabled) return;
+
+            // Simulate realistic metrics (in production, fetch from actual APIs)
+            const eventsProcessed = Math.floor(5000 + Math.random() * 5000);
+            const activeConnections = Math.floor(15 + Math.random() * 10);
+            const systemLatency = Math.floor(50 + Math.random() * 100);
+            const storageUsed = (250 + Math.random() * 50).toFixed(1);
+            const activeUsers = Math.floor(8 + Math.random() * 7);
+
+            // Update header stats
+            animateValue('eventsProcessed', eventsProcessed);
+            animateValue('activeConnections', activeConnections);
+            animateValue('systemLatency', systemLatency);
+            animateValue('storageUsed', parseFloat(storageUsed));
+            animateValue('activeUsers', activeUsers);
+
+            // Update node-specific metrics
+            animateValue('nasaThroughput', Math.floor(1000 + Math.random() * 500));
+            animateValue('noaaThroughput', Math.floor(1500 + Math.random() * 500));
+            animateValue('iotThroughput', Math.floor(200 + Math.random() * 100));
+            animateValue('validationRate', (95 + Math.random() * 5).toFixed(1));
+            animateValue('dlqMessages', Math.floor(Math.random() * 10));
+            animateValue('qualityScore', (96 + Math.random() * 4).toFixed(1));
+            animateValue('kafkaThroughput', Math.floor(8000 + Math.random() * 2000));
+            animateValue('hotLatency', Math.floor(60 + Math.random() * 40));
+            animateValue('warmLatency', Math.floor(300 + Math.random() * 200));
+            animateValue('apiRequests', Math.floor(500 + Math.random() * 500));
+            animateValue('auditEvents', Math.floor(200 + Math.random() * 100));
+            animateValue('cacheHitRate', (65 + Math.random() * 10).toFixed(1));
+            animateValue('prometheusMetrics', Math.floor(150 + Math.random() * 50));
+            animateValue('logVolume', Math.floor(300 + Math.random() * 200));
+        }
+
+        // Animate value change
+        function animateValue(id, targetValue) {
+            const element = document.getElementById(id);
+            if (!element) return;
+
+            const currentValue = parseFloat(element.textContent) || 0;
+            const increment = (targetValue - currentValue) / 20;
+            let current = currentValue;
+
+            const timer = setInterval(() => {
+                current += increment;
+                if ((increment > 0 && current >= targetValue) || (increment < 0 && current <= targetValue)) {
+                    element.textContent = Number.isInteger(targetValue) ? targetValue : targetValue.toFixed(1);
+                    clearInterval(timer);
+                } else {
+                    element.textContent = Number.isInteger(targetValue) ? Math.floor(current) : current.toFixed(1);
+                }
+            }, 50);
+        }
+
+        // Tooltip functionality
+        const tooltip = document.getElementById('tooltip');
+        document.querySelectorAll('.node').forEach(node => {
+            node.addEventListener('mouseenter', (e) => {
+                const info = node.getAttribute('data-info');
+                const metric = node.getAttribute('data-metric');
+                tooltip.innerHTML = `<strong>${node.querySelector('h3').textContent}</strong><br>${info}<br><br><em>Status: ${metric}</em>`;
+                tooltip.style.display = 'block';
+                updateTooltipPosition(e);
+            });
+
+            node.addEventListener('mousemove', updateTooltipPosition);
+
+            node.addEventListener('mouseleave', () => {
+                tooltip.style.display = 'none';
+            });
+        });
+
+        function updateTooltipPosition(e) {
+            tooltip.style.left = (e.clientX + 20) + 'px';
+            tooltip.style.top = (e.clientY + 20) + 'px';
+        }
+
+        // Control functions
+        function toggleParticles() {
+            particlesEnabled = !particlesEnabled;
+        }
+
+        function toggleMetrics() {
+            metricsEnabled = !metricsEnabled;
+        }
+
+        function resetView() {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // Initialize
+        initBackgroundAnimation();
+
+        // Start animations
+        setInterval(createParticle, 200);
+        setInterval(updateMetrics, 2000);
+        updateMetrics(); // Initial update
+
+        // Add smooth scroll
+        document.addEventListener('DOMContentLoaded', () => {
+            window.scrollTo(0, 0);
+        });
+    </script>
+</body>
+</html>

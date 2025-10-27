@@ -1,0 +1,1445 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Box,
+  Paper,
+  Typography,
+  Card,
+  CardContent,
+  Chip,
+  IconButton,
+  Tooltip,
+  Switch,
+  FormControlLabel,
+  Slider,
+  Button,
+  Alert,
+  Badge,
+  Divider,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemIcon,
+  AppBar,
+  Toolbar,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  LinearProgress,
+} from '@mui/material';
+import {
+  Layers,
+  LocalFireDepartment,
+  Home,
+  Power,
+  School,
+  LocalHospital,
+  Warning,
+  PlayArrow,
+  Pause,
+  FastForward,
+  Fullscreen,
+  Refresh,
+  ExpandMore,
+  Schedule,
+  Flight,
+  LocalPolice,
+  Radio,
+  Science,
+  WaterDrop,
+} from '@mui/icons-material';
+import InteractiveFireMap from '../components/WildfireMap/InteractiveFireMap';
+import DirectWindyEmbed from '../components/WildfireMap/DirectWindyEmbed';
+import ProfessionalWeatherMap from '../components/WildfireMap/ProfessionalWeatherMap';
+
+// Mock data types for wildfire situational awareness
+interface ActiveFire {
+  id: string;
+  latitude: number;
+  longitude: number;
+  brightness: number;
+  confidence: number;
+  frp: number; // Fire Radiative Power
+  acquisitionTime: string;
+  satellite: 'MODIS' | 'VIIRS';
+  intensity: 'Low' | 'Moderate' | 'High' | 'Extreme';
+}
+
+interface FirePerimeter {
+  id: string;
+  fireName: string;
+  geometry: any; // GeoJSON polygon
+  acres: number;
+  containment: number;
+  status: 'Active' | 'Contained' | 'Controlled';
+  lastUpdated: string;
+}
+
+
+interface PopulationAtRisk {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  population: number;
+  households: number;
+  vulnerablePopulation: number;
+  evacuationStatus: 'None' | 'Advisory' | 'Warning' | 'Order';
+  threatLevel: 'Low' | 'Moderate' | 'High' | 'Extreme';
+}
+
+interface CriticalInfrastructure {
+  id: string;
+  type: 'hospital' | 'school' | 'powerline' | 'road' | 'bridge' | 'water_facility' | 'helicopter_landing' | 'water_source' | 'emergency_service' | 'communication_tower' | 'fuel_analysis';
+  name: string;
+  latitude: number;
+  longitude: number;
+  priority: 'Low' | 'Medium' | 'High' | 'Critical';
+  status: 'Operational' | 'Threatened' | 'Damaged' | 'Offline';
+  capacity?: number;
+  accessibility?: 'Good' | 'Limited' | 'Restricted';
+}
+
+interface FireHazardZone {
+  id: string;
+  name: string;
+  geometry: any; // GeoJSON polygon
+  severity: 'Very High' | 'High' | 'Moderate' | 'Low';
+  fuelType: string;
+  lastAssessed: string;
+}
+
+interface WildlandUrbanInterface {
+  id: string;
+  name: string;
+  geometry: any; // GeoJSON polygon
+  riskLevel: 'Extreme' | 'High' | 'Moderate' | 'Low';
+  populationDensity: number;
+  structureCount: number;
+}
+
+interface EvacuationRoute {
+  id: string;
+  name: string;
+  geometry: any; // GeoJSON linestring
+  capacity: number;
+  status: 'Open' | 'Congested' | 'Closed' | 'Blocked';
+  estimatedTravelTime: number; // minutes
+}
+
+interface WeatherStation {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  type: 'RAWS' | 'ASOS' | 'METAR' | 'IoT';
+  lastUpdate: string;
+  temperature: number;
+  humidity: number;
+  windSpeed: number;
+  windDirection: number;
+  status: 'Active' | 'Inactive' | 'Maintenance';
+}
+
+
+const WildfireSituationalAwarenessPage: React.FC = () => {
+  const [selectedLayers, setSelectedLayers] = useState({
+    activeFires: true,
+    firePerimeters: true,
+    windVectors: true, // High-resolution winds enabled by default
+    temperature: true, // High-resolution temperature enabled by default
+    humidity: false,
+    vegetation: true,
+    population: true,
+    infrastructure: false,
+    predictions: true,
+    iotSensors: true,
+    precipitation: false,
+    pressure: false,
+    cloudCover: false,
+    cape: false,
+    visibility: false,
+    snow: false,
+    waves: false,
+    lightning: false,
+    airQuality: false,
+    hazardZones: true,
+    helicopterLanding: true,
+    waterSources: true,
+    emergencyServices: true,
+    communicationTowers: true,
+    wildlandUrbanInterface: true,
+    evacuationRoutes: true,
+    fuelAnalysis: true,
+    weatherStations: true
+  });
+  const [mapMode, setMapMode] = useState<'custom' | 'windy' | 'live_weather'>('live_weather');
+
+  const [timeSlider, setTimeSlider] = useState(0); // 0 = current, 1-48 = hours ahead
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [selectedRegion, setSelectedRegion] = useState('california');
+  const [layerOpacity, setLayerOpacity] = useState({
+    fires: 100,
+    weather: 70,
+    vegetation: 60,
+    population: 80
+  });
+
+  const [mapCenter, setMapCenter] = useState<[number, number]>([34.0522, -118.2437]); // Los Angeles default
+  const [mapZoom, setMapZoom] = useState(8);
+  const [loading, setLoading] = useState(false);
+
+  // Mock data - in production, this would come from your backend APIs
+  const [activeFires, setActiveFires] = useState<ActiveFire[]>([
+    {
+      id: 'FIRE-001',
+      latitude: 34.2608,
+      longitude: -118.4661,
+      brightness: 325.8,
+      confidence: 95,
+      frp: 42.5,
+      acquisitionTime: new Date().toISOString(),
+      satellite: 'MODIS',
+      intensity: 'High'
+    },
+    {
+      id: 'FIRE-002',
+      latitude: 34.0522,
+      longitude: -118.2437,
+      brightness: 298.2,
+      confidence: 87,
+      frp: 28.9,
+      acquisitionTime: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
+      satellite: 'VIIRS',
+      intensity: 'Moderate'
+    },
+    {
+      id: 'FIRE-003',
+      latitude: 34.3089,
+      longitude: -118.4398,
+      brightness: 310.5,
+      confidence: 92,
+      frp: 35.7,
+      acquisitionTime: new Date(Date.now() - 8 * 60 * 1000).toISOString(),
+      satellite: 'MODIS',
+      intensity: 'High'
+    },
+    {
+      id: 'FIRE-004',
+      latitude: 34.2256,
+      longitude: -118.0606,
+      brightness: 275.3,
+      confidence: 78,
+      frp: 18.2,
+      acquisitionTime: new Date(Date.now() - 22 * 60 * 1000).toISOString(),
+      satellite: 'VIIRS',
+      intensity: 'Low'
+    },
+    {
+      id: 'FIRE-005',
+      latitude: 34.3567,
+      longitude: -118.1234,
+      brightness: 340.7,
+      confidence: 98,
+      frp: 55.8,
+      acquisitionTime: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
+      satellite: 'MODIS',
+      intensity: 'Extreme'
+    },
+    {
+      id: 'FIRE-006',
+      latitude: 34.1478,
+      longitude: -118.1445,
+      brightness: 318.4,
+      confidence: 91,
+      frp: 47.2,
+      acquisitionTime: new Date(Date.now() - 12 * 60 * 1000).toISOString(),
+      satellite: 'MODIS',
+      intensity: 'High'
+    },
+    {
+      id: 'FIRE-007',
+      latitude: 34.1982,
+      longitude: -118.5312,
+      brightness: 289.6,
+      confidence: 83,
+      frp: 31.8,
+      acquisitionTime: new Date(Date.now() - 28 * 60 * 1000).toISOString(),
+      satellite: 'VIIRS',
+      intensity: 'Moderate'
+    },
+    {
+      id: 'FIRE-008',
+      latitude: 34.4123,
+      longitude: -118.2876,
+      brightness: 356.2,
+      confidence: 97,
+      frp: 62.1,
+      acquisitionTime: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+      satellite: 'MODIS',
+      intensity: 'Extreme'
+    },
+    {
+      id: 'FIRE-009',
+      latitude: 34.0876,
+      longitude: -118.3921,
+      brightness: 267.8,
+      confidence: 76,
+      frp: 19.4,
+      acquisitionTime: new Date(Date.now() - 35 * 60 * 1000).toISOString(),
+      satellite: 'VIIRS',
+      intensity: 'Low'
+    },
+    {
+      id: 'FIRE-010',
+      latitude: 34.3245,
+      longitude: -118.3654,
+      brightness: 298.1,
+      confidence: 88,
+      frp: 38.7,
+      acquisitionTime: new Date(Date.now() - 18 * 60 * 1000).toISOString(),
+      satellite: 'MODIS',
+      intensity: 'High'
+    }
+  ]);
+
+  const [firePerimeters] = useState<FirePerimeter[]>([
+    {
+      id: 'PERM-001',
+      fireName: 'Saddleridge Fire',
+      geometry: {}, // Mock polygon
+      acres: 850,
+      containment: 15,
+      status: 'Active',
+      lastUpdated: '2024-09-14T22:00:00Z'
+    }
+  ]);
+
+  const [populationAtRisk] = useState<PopulationAtRisk[]>([
+    {
+      id: 'POP-001',
+      name: 'Sylmar Community',
+      latitude: 34.3089,
+      longitude: -118.4398,
+      population: 12500,
+      households: 4200,
+      vulnerablePopulation: 1800,
+      evacuationStatus: 'Warning',
+      threatLevel: 'High'
+    },
+    {
+      id: 'POP-002',
+      name: 'Porter Ranch',
+      latitude: 34.2688,
+      longitude: -118.5557,
+      population: 8900,
+      households: 3100,
+      vulnerablePopulation: 950,
+      evacuationStatus: 'Advisory',
+      threatLevel: 'Moderate'
+    }
+  ]);
+
+  const [criticalInfrastructure] = useState<CriticalInfrastructure[]>([
+    {
+      id: 'INFRA-001',
+      type: 'hospital',
+      name: 'Olive View-UCLA Medical Center',
+      latitude: 34.2717,
+      longitude: -118.4447,
+      priority: 'Critical',
+      status: 'Operational'
+    },
+    {
+      id: 'INFRA-002',
+      type: 'powerline',
+      name: 'Angeles Forest Transmission Line',
+      latitude: 34.3200,
+      longitude: -118.1500,
+      priority: 'High',
+      status: 'Threatened'
+    },
+    {
+      id: 'HELI-001',
+      type: 'helicopter_landing',
+      name: 'Van Norman Complex Helipad',
+      latitude: 34.2851,
+      longitude: -118.4889,
+      priority: 'High',
+      status: 'Operational',
+      capacity: 2,
+      accessibility: 'Good'
+    },
+    {
+      id: 'HELI-002',
+      type: 'helicopter_landing',
+      name: 'Angeles National Forest Helispot',
+      latitude: 34.3123,
+      longitude: -118.1567,
+      priority: 'High',
+      status: 'Operational',
+      capacity: 4,
+      accessibility: 'Limited'
+    },
+    {
+      id: 'WATER-001',
+      type: 'water_source',
+      name: 'Hansen Dam Recreation Area',
+      latitude: 34.2584,
+      longitude: -118.4108,
+      priority: 'High',
+      status: 'Operational',
+      capacity: 50000,
+      accessibility: 'Good'
+    },
+    {
+      id: 'WATER-002',
+      type: 'water_source',
+      name: 'Lopez Reservoir',
+      latitude: 34.3045,
+      longitude: -118.2001,
+      priority: 'Medium',
+      status: 'Operational',
+      capacity: 25000,
+      accessibility: 'Limited'
+    },
+    {
+      id: 'EMERG-001',
+      type: 'emergency_service',
+      name: 'LA County Fire Station 73',
+      latitude: 34.2695,
+      longitude: -118.4523,
+      priority: 'Critical',
+      status: 'Operational'
+    },
+    {
+      id: 'EMERG-002',
+      type: 'emergency_service',
+      name: 'Sylmar Police Station',
+      latitude: 34.3089,
+      longitude: -118.4398,
+      priority: 'High',
+      status: 'Operational'
+    },
+    {
+      id: 'COMM-001',
+      type: 'communication_tower',
+      name: 'Mount Wilson Communications',
+      latitude: 34.2256,
+      longitude: -118.0606,
+      priority: 'Critical',
+      status: 'Operational'
+    },
+    {
+      id: 'COMM-002',
+      type: 'communication_tower',
+      name: 'Verdugo Peak Repeater',
+      latitude: 34.2089,
+      longitude: -118.2567,
+      priority: 'High',
+      status: 'Operational'
+    },
+    {
+      id: 'FUEL-001',
+      type: 'fuel_analysis',
+      name: 'Angeles Forest Fuel Station Alpha',
+      latitude: 34.3156,
+      longitude: -118.1234,
+      priority: 'Medium',
+      status: 'Operational'
+    },
+    {
+      id: 'FUEL-002',
+      type: 'fuel_analysis',
+      name: 'Tujunga Wash Fuel Monitoring',
+      latitude: 34.2756,
+      longitude: -118.2845,
+      priority: 'Medium',
+      status: 'Operational'
+    }
+  ]);
+
+  const [fireHazardZones] = useState<FireHazardZone[]>([
+    {
+      id: 'FHZ-001',
+      name: 'Angeles National Forest Zone A',
+      geometry: {}, // Mock polygon
+      severity: 'Very High',
+      fuelType: 'Chaparral/Mixed Brush',
+      lastAssessed: '2024-09-01'
+    },
+    {
+      id: 'FHZ-002',
+      name: 'Sylmar Hills Zone B',
+      geometry: {}, // Mock polygon
+      severity: 'High',
+      fuelType: 'Grass/Oak Woodland',
+      lastAssessed: '2024-08-15'
+    },
+    {
+      id: 'FHZ-003',
+      name: 'Porter Ranch Zone C',
+      geometry: {}, // Mock polygon
+      severity: 'Moderate',
+      fuelType: 'Urban Interface Vegetation',
+      lastAssessed: '2024-09-10'
+    }
+  ]);
+
+  const [wildlandUrbanInterface] = useState<WildlandUrbanInterface[]>([
+    {
+      id: 'WUI-001',
+      name: 'Sylmar WUI Zone',
+      geometry: {}, // Mock polygon
+      riskLevel: 'High',
+      populationDensity: 2500,
+      structureCount: 4200
+    },
+    {
+      id: 'WUI-002',
+      name: 'Porter Ranch WUI Zone',
+      geometry: {}, // Mock polygon
+      riskLevel: 'Moderate',
+      populationDensity: 1800,
+      structureCount: 3100
+    }
+  ]);
+
+  const [evacuationRoutes] = useState<EvacuationRoute[]>([
+    {
+      id: 'EVAC-001',
+      name: 'SR-14 South to I-5',
+      geometry: {}, // Mock linestring
+      capacity: 8000,
+      status: 'Open',
+      estimatedTravelTime: 45
+    },
+    {
+      id: 'EVAC-002',
+      name: 'Foothill Boulevard West',
+      geometry: {}, // Mock linestring
+      capacity: 5000,
+      status: 'Congested',
+      estimatedTravelTime: 75
+    },
+    {
+      id: 'EVAC-003',
+      name: 'I-210 East Emergency Route',
+      geometry: {}, // Mock linestring
+      capacity: 12000,
+      status: 'Open',
+      estimatedTravelTime: 35
+    }
+  ]);
+
+  const [weatherStations] = useState<WeatherStation[]>([
+    {
+      id: 'RAWS-001',
+      name: 'Angeles Crest RAWS',
+      latitude: 34.3567,
+      longitude: -118.1234,
+      type: 'RAWS',
+      lastUpdate: '2024-09-14T22:00:00Z',
+      temperature: 85,
+      humidity: 12,
+      windSpeed: 28,
+      windDirection: 45,
+      status: 'Active'
+    },
+    {
+      id: 'RAWS-002',
+      name: 'Sylmar RAWS',
+      latitude: 34.3089,
+      longitude: -118.4398,
+      type: 'RAWS',
+      lastUpdate: '2024-09-14T22:00:00Z',
+      temperature: 92,
+      humidity: 8,
+      windSpeed: 35,
+      windDirection: 50,
+      status: 'Active'
+    },
+    {
+      id: 'IOT-001',
+      name: 'Porter Ranch IoT Weather',
+      latitude: 34.2688,
+      longitude: -118.5557,
+      type: 'IoT',
+      lastUpdate: '2024-09-14T22:05:00Z',
+      temperature: 89,
+      humidity: 15,
+      windSpeed: 22,
+      windDirection: 40,
+      status: 'Active'
+    }
+  ]);
+
+  useEffect(() => {
+    // Simulate real-time data updates
+    const interval = setInterval(() => {
+      // In production, this would fetch latest data from your APIs
+      console.log('Updating fire data...');
+
+      // Simulate fire data updates
+      setActiveFires(prevFires => {
+        return prevFires.map(fire => {
+          // Simulate slight changes in fire properties
+          const timeElapsed = (Date.now() - new Date(fire.acquisitionTime).getTime()) / (1000 * 60); // minutes
+
+          // Simulate fire growth over time
+          let newFrp = fire.frp + (Math.random() - 0.4) * 5; // Slight random change
+          newFrp = Math.max(5, Math.min(100, newFrp)); // Keep within bounds
+
+          let newBrightness = fire.brightness + (Math.random() - 0.5) * 20;
+          newBrightness = Math.max(250, Math.min(400, newBrightness));
+
+          // Update intensity based on FRP
+          let newIntensity: 'Low' | 'Moderate' | 'High' | 'Extreme' = 'Low';
+          if (newFrp > 50) newIntensity = 'Extreme';
+          else if (newFrp > 35) newIntensity = 'High';
+          else if (newFrp > 20) newIntensity = 'Moderate';
+
+          return {
+            ...fire,
+            frp: Math.round(newFrp * 10) / 10,
+            brightness: Math.round(newBrightness * 10) / 10,
+            intensity: newIntensity,
+            acquisitionTime: new Date().toISOString()
+          };
+        });
+      });
+    }, 30000); // Update every 30 seconds
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleLayerToggle = (layerName: keyof typeof selectedLayers) => {
+    setSelectedLayers(prev => ({
+      ...prev,
+      [layerName]: !prev[layerName]
+    }));
+  };
+
+  const handlePlayPause = () => {
+    setIsPlaying(!isPlaying);
+  };
+
+  const handleRegionChange = (region: string) => {
+    setSelectedRegion(region);
+    // Update map center based on region
+    switch (region) {
+      case 'california':
+        setMapCenter([36.7783, -119.4179]);
+        setMapZoom(6);
+        break;
+      case 'los_angeles':
+        setMapCenter([34.0522, -118.2437]);
+        setMapZoom(9);
+        break;
+      case 'san_diego':
+        setMapCenter([32.7157, -117.1611]);
+        setMapZoom(9);
+        break;
+      case 'bay_area':
+        setMapCenter([37.7749, -122.4194]);
+        setMapZoom(9);
+        break;
+    }
+  };
+
+  const refreshAllLayers = async () => {
+    setLoading(true);
+    console.log('Refreshing all layers...');
+
+    // Simulate API calls to refresh all layers
+    try {
+      // In production, this would make actual API calls to:
+      // - NASA FIRMS for fire data
+      // - NOAA HRRR for weather data
+      // - CAL FIRE for fire perimeters
+      // - Local emergency services for infrastructure status
+
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Update fire data with fresh timestamps
+      setActiveFires(prevFires =>
+        prevFires.map(fire => ({
+          ...fire,
+          acquisitionTime: new Date().toISOString()
+        }))
+      );
+
+      console.log('All layers refreshed successfully');
+    } catch (error) {
+      console.error('Error refreshing layers:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getEvacuationColor = (status: string) => {
+    switch (status) {
+      case 'Order': return 'error';
+      case 'Warning': return 'warning';
+      case 'Advisory': return 'info';
+      default: return 'success';
+    }
+  };
+
+  const getThreatColor = (threat: string) => {
+    switch (threat) {
+      case 'Extreme': return 'error';
+      case 'High': return 'warning';
+      case 'Moderate': return 'info';
+      case 'Low': return 'success';
+      default: return 'default';
+    }
+  };
+
+  const getInfrastructureIcon = (type: string) => {
+    switch (type) {
+      case 'hospital': return <LocalHospital />;
+      case 'school': return <School />;
+      case 'powerline': return <Power />;
+      case 'helicopter_landing': return <Flight />;
+      case 'water_source': return <WaterDrop />;
+      case 'emergency_service': return <LocalPolice />;
+      case 'communication_tower': return <Radio />;
+      case 'fuel_analysis': return <Science />;
+      default: return <Warning />;
+    }
+  };
+
+  const getSeverityColor = (severity: string) => {
+    switch (severity) {
+      case 'Very High': return '#8B0000';
+      case 'High': return '#FF4500';
+      case 'Moderate': return '#FFA500';
+      case 'Low': return '#FFD700';
+      default: return '#999';
+    }
+  };
+
+  const getRiskLevelColor = (riskLevel: string) => {
+    switch (riskLevel) {
+      case 'Extreme': return '#8B0000';
+      case 'High': return '#FF4500';
+      case 'Moderate': return '#FFA500';
+      case 'Low': return '#32CD32';
+      default: return '#999';
+    }
+  };
+
+  const getRouteStatusColor = (status: string) => {
+    switch (status) {
+      case 'Open': return '#32CD32';
+      case 'Congested': return '#FFA500';
+      case 'Closed': return '#FF4500';
+      case 'Blocked': return '#8B0000';
+      default: return '#999';
+    }
+  };
+
+  const activeFiresCount = activeFires.length;
+  const extremeThreatAreas = populationAtRisk.filter(p => p.threatLevel === 'Extreme').length;
+  const evacuationOrders = populationAtRisk.filter(p => p.evacuationStatus === 'Order').length;
+  const threatenedInfrastructure = criticalInfrastructure.filter(i => i.status === 'Threatened').length;
+
+  return (
+    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      {/* Header Bar */}
+      <AppBar position="static" elevation={1}>
+        <Toolbar>
+          <LocalFireDepartment sx={{ mr: 2 }} />
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+            Wildfire Situational Awareness Dashboard
+          </Typography>
+
+          {/* Region Selector */}
+          <FormControl size="small" sx={{ mr: 2, minWidth: 150 }}>
+            <InputLabel sx={{ color: 'white' }}>Region</InputLabel>
+            <Select
+              value={selectedRegion}
+              onChange={(e) => handleRegionChange(e.target.value)}
+              label="Region"
+              sx={{ color: 'white', '.MuiOutlinedInput-notchedOutline': { borderColor: 'white' } }}
+            >
+              <MenuItem value="california">California</MenuItem>
+              <MenuItem value="los_angeles">Los Angeles County</MenuItem>
+              <MenuItem value="san_diego">San Diego County</MenuItem>
+              <MenuItem value="bay_area">Bay Area</MenuItem>
+              <MenuItem value="central_valley">Central Valley</MenuItem>
+              <MenuItem value="northern_california">Northern California</MenuItem>
+            </Select>
+          </FormControl>
+
+          {/* Quick Stats */}
+          <Box sx={{ display: 'flex', gap: 2, mr: 2 }}>
+            <Badge badgeContent={activeFiresCount} color="error">
+              <Chip label="Active Fires" color="secondary" size="small" />
+            </Badge>
+            <Badge badgeContent={evacuationOrders} color="error">
+              <Chip label="Evacuations" color="secondary" size="small" />
+            </Badge>
+          </Box>
+
+          <Tooltip title="Refresh All Data">
+            <IconButton color="inherit" onClick={refreshAllLayers} disabled={loading}>
+              <Refresh />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Fullscreen">
+            <IconButton color="inherit">
+              <Fullscreen />
+            </IconButton>
+          </Tooltip>
+        </Toolbar>
+      </AppBar>
+
+      {loading && <LinearProgress />}
+
+      <Box sx={{ display: 'flex', flex: 1 }}>
+        {/* Layer Controls Sidebar */}
+        <Paper sx={{ width: 350, overflow: 'auto', borderRadius: 0 }}>
+          <Box sx={{ p: 2 }}>
+            {/* Time Controls */}
+            <Card sx={{ mb: 2 }}>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  <Schedule sx={{ mr: 1, verticalAlign: 'middle' }} />
+                  Time Controls
+                </Typography>
+
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                  <IconButton onClick={handlePlayPause} color="primary">
+                    {isPlaying ? <Pause /> : <PlayArrow />}
+                  </IconButton>
+                  <Typography variant="body2">
+                    {timeSlider === 0 ? 'Current Time' : `+${timeSlider}h Forecast`}
+                  </Typography>
+                  <IconButton size="small">
+                    <FastForward />
+                  </IconButton>
+                </Box>
+
+                <Slider
+                  value={timeSlider}
+                  onChange={(e, value) => setTimeSlider(value as number)}
+                  min={0}
+                  max={48}
+                  step={1}
+                  valueLabelDisplay="auto"
+                  valueLabelFormat={(value) => `${value === 0 ? 'Now' : `+${value}h`}`}
+                />
+              </CardContent>
+            </Card>
+
+            {/* Layer Toggle Controls */}
+            <Typography variant="h6" gutterBottom>
+              <Layers sx={{ mr: 1, verticalAlign: 'middle' }} />
+              Map Layers
+            </Typography>
+
+            {/* Fire Layers */}
+            <Accordion defaultExpanded>
+              <AccordionSummary expandIcon={<ExpandMore />}>
+                <Typography variant="subtitle1">🔥 Fire Information</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <List dense>
+                  <ListItem>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={selectedLayers.activeFires}
+                          onChange={() => handleLayerToggle('activeFires')}
+                          color="error"
+                        />
+                      }
+                      label="Active Fire Detections"
+                    />
+                    <Badge badgeContent={activeFiresCount} color="error" />
+                  </ListItem>
+                  <ListItem>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={selectedLayers.firePerimeters}
+                          onChange={() => handleLayerToggle('firePerimeters')}
+                          color="warning"
+                        />
+                      }
+                      label="Fire Perimeters"
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={selectedLayers.predictions}
+                          onChange={() => handleLayerToggle('predictions')}
+                          color="info"
+                        />
+                      }
+                      label="Spread Predictions"
+                    />
+                  </ListItem>
+                </List>
+
+                <Typography variant="body2" sx={{ mt: 1, mb: 1 }}>
+                  Layer Opacity: {layerOpacity.fires}%
+                </Typography>
+                <Slider
+                  value={layerOpacity.fires}
+                  onChange={(e, value) => setLayerOpacity(prev => ({ ...prev, fires: value as number }))}
+                  size="small"
+                />
+              </AccordionDetails>
+            </Accordion>
+
+            {/* Weather Layers */}
+            <Accordion>
+              <AccordionSummary expandIcon={<ExpandMore />}>
+                <Typography variant="subtitle1">🌬️ Weather Conditions</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <List dense>
+                  <ListItem>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={selectedLayers.windVectors}
+                          onChange={() => handleLayerToggle('windVectors')}
+                          color="primary"
+                        />
+                      }
+                      label="Wind Speed & Direction"
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={selectedLayers.temperature}
+                          onChange={() => handleLayerToggle('temperature')}
+                          color="error"
+                        />
+                      }
+                      label="Temperature"
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={selectedLayers.humidity}
+                          onChange={() => handleLayerToggle('humidity')}
+                          color="info"
+                        />
+                      }
+                      label="Humidity"
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={selectedLayers.iotSensors}
+                          onChange={() => handleLayerToggle('iotSensors')}
+                          color="warning"
+                        />
+                      }
+                      label="IoT Weather Stations"
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={selectedLayers.pressure}
+                          onChange={() => handleLayerToggle('pressure')}
+                          color="secondary"
+                        />
+                      }
+                      label="Atmospheric Pressure"
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={selectedLayers.cloudCover}
+                          onChange={() => handleLayerToggle('cloudCover')}
+                          color="info"
+                        />
+                      }
+                      label="Cloud Cover"
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={selectedLayers.cape}
+                          onChange={() => handleLayerToggle('cape')}
+                          color="warning"
+                        />
+                      }
+                      label="CAPE (Instability)"
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={selectedLayers.visibility}
+                          onChange={() => handleLayerToggle('visibility')}
+                          color="default"
+                        />
+                      }
+                      label="Visibility"
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={selectedLayers.snow}
+                          onChange={() => handleLayerToggle('snow')}
+                          color="info"
+                        />
+                      }
+                      label="Snow Depth"
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={selectedLayers.waves}
+                          onChange={() => handleLayerToggle('waves')}
+                          color="primary"
+                        />
+                      }
+                      label="Wave Height"
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={selectedLayers.lightning}
+                          onChange={() => handleLayerToggle('lightning')}
+                          color="warning"
+                        />
+                      }
+                      label="Lightning Activity"
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={selectedLayers.airQuality}
+                          onChange={() => handleLayerToggle('airQuality')}
+                          color="success"
+                        />
+                      }
+                      label="Air Quality (PM2.5)"
+                    />
+                  </ListItem>
+                </List>
+              </AccordionDetails>
+            </Accordion>
+
+            {/* Environment Layers */}
+            <Accordion>
+              <AccordionSummary expandIcon={<ExpandMore />}>
+                <Typography variant="subtitle1">🌿 Environment</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <List dense>
+                  <ListItem>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={selectedLayers.vegetation}
+                          onChange={() => handleLayerToggle('vegetation')}
+                          color="success"
+                        />
+                      }
+                      label="Vegetation / Fuel Load"
+                    />
+                  </ListItem>
+                </List>
+              </AccordionDetails>
+            </Accordion>
+
+            {/* Population & Infrastructure */}
+            <Accordion>
+              <AccordionSummary expandIcon={<ExpandMore />}>
+                <Typography variant="subtitle1">🏠 Population at Risk</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <List dense>
+                  <ListItem>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={selectedLayers.population}
+                          onChange={() => handleLayerToggle('population')}
+                          color="secondary"
+                        />
+                      }
+                      label="Communities"
+                    />
+                    <Badge badgeContent={extremeThreatAreas} color="error" />
+                  </ListItem>
+                  <ListItem>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={selectedLayers.wildlandUrbanInterface}
+                          onChange={() => handleLayerToggle('wildlandUrbanInterface')}
+                          color="warning"
+                        />
+                      }
+                      label="🏠 Wildland Urban Interface"
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={selectedLayers.evacuationRoutes}
+                          onChange={() => handleLayerToggle('evacuationRoutes')}
+                          color="info"
+                        />
+                      }
+                      label="🛣️ Evacuation Routes"
+                    />
+                  </ListItem>
+                </List>
+              </AccordionDetails>
+            </Accordion>
+
+            {/* Fire Hazard & Fuel Analysis */}
+            <Accordion>
+              <AccordionSummary expandIcon={<ExpandMore />}>
+                <Typography variant="subtitle1">🔥 Fire Hazard Zones</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <List dense>
+                  <ListItem>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={selectedLayers.hazardZones}
+                          onChange={() => handleLayerToggle('hazardZones')}
+                          color="error"
+                        />
+                      }
+                      label="Fire Hazard Severity Zones"
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={selectedLayers.fuelAnalysis}
+                          onChange={() => handleLayerToggle('fuelAnalysis')}
+                          color="warning"
+                        />
+                      }
+                      label="🌿 Fuel Load Analysis"
+                    />
+                  </ListItem>
+                </List>
+              </AccordionDetails>
+            </Accordion>
+
+            {/* Emergency Infrastructure */}
+            <Accordion>
+              <AccordionSummary expandIcon={<ExpandMore />}>
+                <Typography variant="subtitle1">🚁 Emergency Infrastructure</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <List dense>
+                  <ListItem>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={selectedLayers.helicopterLanding}
+                          onChange={() => handleLayerToggle('helicopterLanding')}
+                          color="primary"
+                        />
+                      }
+                      label="🚁 Helicopter Landing Zones"
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={selectedLayers.waterSources}
+                          onChange={() => handleLayerToggle('waterSources')}
+                          color="info"
+                        />
+                      }
+                      label="💧 Water Sources"
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={selectedLayers.emergencyServices}
+                          onChange={() => handleLayerToggle('emergencyServices')}
+                          color="error"
+                        />
+                      }
+                      label="🏥 Emergency Services"
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={selectedLayers.communicationTowers}
+                          onChange={() => handleLayerToggle('communicationTowers')}
+                          color="secondary"
+                        />
+                      }
+                      label="📡 Communication Towers"
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={selectedLayers.infrastructure}
+                          onChange={() => handleLayerToggle('infrastructure')}
+                          color="info"
+                        />
+                      }
+                      label="Critical Infrastructure"
+                    />
+                    <Badge badgeContent={threatenedInfrastructure} color="warning" />
+                  </ListItem>
+                </List>
+              </AccordionDetails>
+            </Accordion>
+
+            {/* Weather Monitoring */}
+            <Accordion>
+              <AccordionSummary expandIcon={<ExpandMore />}>
+                <Typography variant="subtitle1">🌡️ Weather Monitoring</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <List dense>
+                  <ListItem>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={selectedLayers.weatherStations}
+                          onChange={() => handleLayerToggle('weatherStations')}
+                          color="primary"
+                        />
+                      }
+                      label="🌡️ Weather Stations (RAWS)"
+                    />
+                  </ListItem>
+                </List>
+              </AccordionDetails>
+            </Accordion>
+
+            <Divider sx={{ my: 2 }} />
+
+            {/* Critical Alerts */}
+            <Typography variant="h6" gutterBottom color="error.main">
+              <Warning sx={{ mr: 1, verticalAlign: 'middle' }} />
+              Critical Alerts
+            </Typography>
+
+            {evacuationOrders > 0 && (
+              <Alert severity="error" sx={{ mb: 1 }}>
+                <Typography variant="body2">
+                  <strong>{evacuationOrders} Evacuation Order{evacuationOrders > 1 ? 's' : ''}</strong>
+                </Typography>
+              </Alert>
+            )}
+
+            {threatenedInfrastructure > 0 && (
+              <Alert severity="warning" sx={{ mb: 1 }}>
+                <Typography variant="body2">
+                  <strong>{threatenedInfrastructure} Infrastructure Site{threatenedInfrastructure > 1 ? 's' : ''} Threatened</strong>
+                </Typography>
+              </Alert>
+            )}
+
+            {/* Population at Risk Summary */}
+            <List dense>
+              {populationAtRisk.filter(p => p.threatLevel !== 'Low').map(pop => (
+                <ListItem key={pop.id}>
+                  <ListItemIcon>
+                    <Home color={getThreatColor(pop.threatLevel) as any} />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={pop.name}
+                    secondary={
+                      <Box>
+                        <Typography variant="caption" display="block">
+                          Population: {pop.population.toLocaleString()}
+                        </Typography>
+                        <Chip
+                          label={pop.evacuationStatus}
+                          color={getEvacuationColor(pop.evacuationStatus) as any}
+                          size="small"
+                        />
+                        <Chip
+                          label={pop.threatLevel}
+                          color={getThreatColor(pop.threatLevel) as any}
+                          size="small"
+                          sx={{ ml: 0.5 }}
+                        />
+                      </Box>
+                    }
+                  />
+                </ListItem>
+              ))}
+            </List>
+          </Box>
+        </Paper>
+
+        {/* Main Map Area */}
+        <Box sx={{ flex: 1, position: 'relative' }}>
+          {/* Map Mode Toggle */}
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 16,
+              left: 16,
+              zIndex: 1100,
+              background: 'rgba(0, 0, 0, 0.8)',
+              borderRadius: 2,
+              padding: 1,
+              display: 'flex',
+              gap: 1
+            }}
+          >
+            <Button
+              variant={mapMode === 'live_weather' ? 'contained' : 'outlined'}
+              size="small"
+              onClick={() => setMapMode('live_weather')}
+              sx={{
+                background: mapMode === 'live_weather' ? '#4CAF50' : 'transparent',
+                color: 'white',
+                borderColor: 'rgba(255, 255, 255, 0.3)',
+                '&:hover': {
+                  background: mapMode === 'live_weather' ? '#388E3C' : 'rgba(255, 255, 255, 0.1)'
+                }
+              }}
+            >
+              🌡️ Live Weather
+            </Button>
+            <Button
+              variant={mapMode === 'windy' ? 'contained' : 'outlined'}
+              size="small"
+              onClick={() => setMapMode('windy')}
+              sx={{
+                background: mapMode === 'windy' ? '#2196F3' : 'transparent',
+                color: 'white',
+                borderColor: 'rgba(255, 255, 255, 0.3)',
+                '&:hover': {
+                  background: mapMode === 'windy' ? '#1976D2' : 'rgba(255, 255, 255, 0.1)'
+                }
+              }}
+            >
+              🌪️ Windy
+            </Button>
+            <Button
+              variant={mapMode === 'custom' ? 'contained' : 'outlined'}
+              size="small"
+              onClick={() => setMapMode('custom')}
+              sx={{
+                background: mapMode === 'custom' ? '#FF5722' : 'transparent',
+                color: 'white',
+                borderColor: 'rgba(255, 255, 255, 0.3)',
+                '&:hover': {
+                  background: mapMode === 'custom' ? '#D84315' : 'rgba(255, 255, 255, 0.1)'
+                }
+              }}
+            >
+              🔥 Fire Analysis
+            </Button>
+          </Box>
+
+          {/* Conditional Map Rendering */}
+          {mapMode === 'live_weather' ? (
+            <ProfessionalWeatherMap
+              mapCenter={mapCenter}
+              activeFires={activeFires}
+              selectedLayers={selectedLayers}
+              onLayerToggle={handleLayerToggle}
+              criticalInfrastructure={criticalInfrastructure}
+              fireHazardZones={fireHazardZones}
+              wildlandUrbanInterface={wildlandUrbanInterface}
+              evacuationRoutes={evacuationRoutes}
+              weatherStations={weatherStations}
+            />
+          ) : mapMode === 'windy' ? (
+            <DirectWindyEmbed
+              mapCenter={mapCenter}
+              activeFires={activeFires}
+              selectedLayers={selectedLayers}
+              onLayerToggle={handleLayerToggle}
+            />
+          ) : (
+            <InteractiveFireMap
+              activeFires={activeFires}
+              windData={[]} // Would be populated from NOAA HRRR
+              weatherData={[]} // Would be populated from weather APIs
+              selectedLayers={selectedLayers}
+              timeHours={timeSlider}
+              mapCenter={mapCenter}
+              mapZoom={mapZoom}
+            />
+          )}
+
+          {/* Map Description */}
+          <Box
+            sx={{
+              position: 'absolute',
+              bottom: 16,
+              right: 16,
+              background: 'rgba(0, 0, 0, 0.8)',
+              color: 'white',
+              padding: 2,
+              borderRadius: 2,
+              maxWidth: 300,
+              zIndex: 1100
+            }}
+          >
+            <Typography variant="body2" sx={{ mb: 1, fontWeight: 'bold' }}>
+              {mapMode === 'live_weather' ? '🌡️ Live Weather Analysis' : mapMode === 'windy' ? '🌪️ Professional Weather Analysis' : '🔥 Fire Behavior Analysis'}
+            </Typography>
+            <Typography variant="caption">
+              {mapMode === 'live_weather'
+                ? 'Professional interactive map with multiple base layers (satellite, terrain, roads) plus real-time weather data from Open-Meteo API, fire markers, and comprehensive weather analysis tools.'
+                : mapMode === 'windy'
+                ? 'Real-time weather data from Windy.com with animated wind patterns, temperature gradients, and humidity overlays for comprehensive fire weather analysis.'
+                : 'Custom fire behavior modeling using Rothermel equations combined with live satellite fire detections, wind data, and fuel conditions.'
+              }
+            </Typography>
+          </Box>
+        </Box>
+      </Box>
+    </Box>
+  );
+};
+
+export default WildfireSituationalAwarenessPage;

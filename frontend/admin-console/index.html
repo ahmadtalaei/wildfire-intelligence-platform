@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Console - Wildfire Intelligence Platform</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+            color: white;
+        }
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .header .badge {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            display: inline-block;
+        }
+        .admin-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+        .admin-card {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .admin-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.15);
+        }
+        .admin-card h3 {
+            color: #2c3e50;
+            margin-bottom: 1rem;
+            font-size: 1.3rem;
+            display: flex;
+            align-items: center;
+        }
+        .admin-card .icon {
+            font-size: 1.5rem;
+            margin-right: 0.5rem;
+        }
+        .admin-card p {
+            color: #666;
+            margin-bottom: 1.5rem;
+        }
+        .admin-actions {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        .btn {
+            display: inline-block;
+            padding: 0.6rem 1.2rem;
+            background: #3498db;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            transition: background 0.3s ease;
+            border: none;
+            cursor: pointer;
+        }
+        .btn:hover {
+            background: #2980b9;
+        }
+        .btn.danger {
+            background: #e74c3c;
+        }
+        .btn.danger:hover {
+            background: #c0392b;
+        }
+        .btn.success {
+            background: #27ae60;
+        }
+        .btn.success:hover {
+            background: #229954;
+        }
+        .btn.warning {
+            background: #f39c12;
+        }
+        .btn.warning:hover {
+            background: #e67e22;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .stat-card {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 1.5rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .stat-label {
+            color: #666;
+            font-size: 0.9rem;
+        }
+        .footer {
+            text-align: center;
+            color: white;
+            opacity: 0.8;
+            margin-top: 3rem;
+        }
+        .login-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .login-form {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+        .login-form h2 {
+            text-align: center;
+            margin-bottom: 1.5rem;
+            color: #2c3e50;
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #666;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+        .login-btn {
+            width: 100%;
+            padding: 0.75rem;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+        .login-btn:hover {
+            background: #2980b9;
+        }
+        .error-message {
+            color: #e74c3c;
+            text-align: center;
+            margin-top: 1rem;
+            display: none;
+        }
+        .hidden {
+            display: none;
+        }
+        .system-status {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+        .status-healthy {
+            background: #27ae60;
+            animation: pulse 2s infinite;
+        }
+        .status-warning {
+            background: #f39c12;
+        }
+        .status-error {
+            background: #e74c3c;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        .action-log {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.8rem;
+        }
+        .log-entry {
+            padding: 0.2rem 0;
+            border-bottom: 1px solid #eee;
+        }
+        .log-timestamp {
+            color: #666;
+            margin-right: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-overlay" id="login-overlay">
+        <div class="login-form">
+            <h2>🛠️ Admin Console Login</h2>
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="email">Email:</label>
+                    <input type="email" id="email" name="email" required placeholder="admin@calfire.gov">
+                </div>
+                <div class="form-group">
+                    <label for="password">Password:</label>
+                    <input type="password" id="password" name="password" required placeholder="admin">
+                </div>
+                <button type="submit" class="login-btn">Login</button>
+                <div class="error-message" id="error-message">Invalid credentials. Please try again.</div>
+            </form>
+        </div>
+    </div>
+
+    <div class="container hidden" id="main-content">
+        <div class="header">
+            <h1>🛠️ Admin Console</h1>
+            <div class="badge">System Administration & Configuration</div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="total-users">127</div>
+                <div class="stat-label">Total Users</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="active-sessions">23</div>
+                <div class="stat-label">Active Sessions</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="system-uptime">99.7%</div>
+                <div class="stat-label">System Uptime</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="storage-used">2.4TB</div>
+                <div class="stat-label">Storage Used</div>
+            </div>
+        </div>
+
+        <div class="admin-grid">
+            <div class="admin-card">
+                <h3><span class="icon">👥</span>User Management</h3>
+                <p>Manage user accounts, roles, permissions, and access controls for the wildfire intelligence platform.</p>
+                <div class="admin-actions">
+                    <button class="btn" onclick="manageUsers()">View Users</button>
+                    <button class="btn success" onclick="createUser()">Add User</button>
+                    <button class="btn warning" onclick="bulkActions()">Bulk Actions</button>
+                </div>
+            </div>
+
+            <div class="admin-card">
+                <h3><span class="icon">🔒</span>Security & Access</h3>
+                <p>Configure authentication, authorization, API keys, and security policies.</p>
+                <div class="admin-actions">
+                    <button class="btn" onclick="viewSecurity()">Security Settings</button>
+                    <button class="btn" onclick="viewApiKeys()">API Keys</button>
+                    <button class="btn danger" onclick="viewAuditLog()">Audit Log</button>
+                </div>
+            </div>
+
+            <div class="admin-card">
+                <h3><span class="icon">⚙️</span>System Configuration</h3>
+                <p>Configure system settings, feature flags, integration endpoints, and platform behavior.</p>
+                <div class="admin-actions">
+                    <button class="btn" onclick="systemSettings()">Settings</button>
+                    <button class="btn" onclick="integrations()">Integrations</button>
+                    <button class="btn warning" onclick="maintenanceMode()">Maintenance</button>
+                </div>
+            </div>
+
+            <div class="admin-card">
+                <h3><span class="icon">📊</span>Data Management</h3>
+                <p>Manage data sources, storage policies, backup schedules, and data retention.</p>
+                <div class="admin-actions">
+                    <button class="btn" onclick="dataSettings()">Data Sources</button>
+                    <button class="btn success" onclick="backupSettings()">Backups</button>
+                    <button class="btn" onclick="storageSettings()">Storage</button>
+                </div>
+            </div>
+
+            <div class="admin-card">
+                <h3><span class="icon">🔧</span>Service Health</h3>
+                <p>Monitor system health, service status, resource usage, and performance metrics.</p>
+                <div style="margin-bottom: 1rem;">
+                    <div><span class="system-status status-healthy"></span>Data Storage Service</div>
+                    <div><span class="system-status status-healthy"></span>PostgreSQL Database</div>
+                    <div><span class="system-status status-healthy"></span>Redis Cache</div>
+                    <div><span class="system-status status-warning"></span>ML Services</div>
+                </div>
+                <div class="admin-actions">
+                    <button class="btn" onclick="viewHealth()">Health Dashboard</button>
+                    <button class="btn warning" onclick="restartServices()">Restart Services</button>
+                </div>
+            </div>
+
+            <div class="admin-card">
+                <h3><span class="icon">📈</span>Analytics & Reports</h3>
+                <p>Generate system reports, usage analytics, and performance insights.</p>
+                <div class="admin-actions">
+                    <button class="btn" onclick="viewReports()">System Reports</button>
+                    <button class="btn" onclick="usageAnalytics()">Usage Analytics</button>
+                    <button class="btn success" onclick="exportData()">Export Data</button>
+                </div>
+            </div>
+
+            <div class="admin-card">
+                <h3><span class="icon">🚨</span>Alerts & Notifications</h3>
+                <p>Configure system alerts, notification channels, and emergency procedures.</p>
+                <div class="admin-actions">
+                    <button class="btn" onclick="alertSettings()">Alert Rules</button>
+                    <button class="btn" onclick="notifications()">Notifications</button>
+                    <button class="btn danger" onclick="emergencySettings()">Emergency</button>
+                </div>
+            </div>
+
+            <div class="admin-card">
+                <h3><span class="icon">🔄</span>System Updates</h3>
+                <p>Manage system updates, patches, feature rollouts, and version control.</p>
+                <div class="admin-actions">
+                    <button class="btn" onclick="checkUpdates()">Check Updates</button>
+                    <button class="btn success" onclick="deployUpdate()">Deploy</button>
+                    <button class="btn warning" onclick="rollback()">Rollback</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="admin-card">
+            <h3><span class="icon">📝</span>Recent Admin Actions</h3>
+            <div class="action-log" id="action-log">
+                <div class="log-entry">
+                    <span class="log-timestamp">2025-09-12 15:30:15</span>
+                    <span>Admin user 'admin' logged into system</span>
+                </div>
+                <div class="log-entry">
+                    <span class="log-timestamp">2025-09-12 15:25:42</span>
+                    <span>Database backup completed successfully</span>
+                </div>
+                <div class="log-entry">
+                    <span class="log-timestamp">2025-09-12 15:20:18</span>
+                    <span>New user 'analyst_jane' created by admin</span>
+                </div>
+                <div class="log-entry">
+                    <span class="log-timestamp">2025-09-12 15:15:33</span>
+                    <span>System configuration updated: alert thresholds</span>
+                </div>
+                <div class="log-entry">
+                    <span class="log-timestamp">2025-09-12 15:10:55</span>
+                    <span>Data ingestion service restarted</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>🏛️ Administrative Interface - Wildfire Intelligence Platform</p>
+            <p>Secure access * Full audit trail * Role-based permissions</p>
+        </div>
+    </div>
+
+    <script>
+        // Wait for DOM to be fully loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check if already logged in
+            if (localStorage.getItem('adminConsoleLoggedIn') === 'true') {
+                document.getElementById('login-overlay').classList.add('hidden');
+                document.getElementById('main-content').classList.remove('hidden');
+                return;
+            }
+
+            // Login functionality
+            const loginForm = document.getElementById('login-form');
+            if (loginForm) {
+                loginForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    
+                    const emailInput = document.getElementById('email');
+                    const passwordInput = document.getElementById('password');
+                    const errorMsg = document.getElementById('error-message');
+                    
+                    if (!emailInput || !passwordInput) {
+                        console.error('Login form elements not found');
+                        return;
+                    }
+                    
+                    const email = emailInput.value.trim();
+                    const password = passwordInput.value.trim();
+                    
+                    // Check credentials
+                    if (email === 'admin@calfire.gov' && password === 'admin') {
+                        // Hide login overlay and show main content
+                        document.getElementById('login-overlay').classList.add('hidden');
+                        document.getElementById('main-content').classList.remove('hidden');
+                        
+                        // Store login state
+                        localStorage.setItem('adminConsoleLoggedIn', 'true');
+                        localStorage.setItem('adminConsoleUser', email);
+                        
+                        addLogEntry(`Admin user '${email}' logged into system`);
+                    } else {
+                        // Show error message
+                        if (errorMsg) {
+                            errorMsg.style.display = 'block';
+                            setTimeout(() => {
+                                errorMsg.style.display = 'none';
+                            }, 3000);
+                        }
+                    }
+                });
+            }
+        });
+
+        // Mock functions for admin actions
+        function manageUsers() {
+            alert('User Management: Would open comprehensive user administration interface with CRUD operations, role assignments, and permission management.');
+        }
+
+        function createUser() {
+            alert('Create User: Would open form to create new user accounts with role selection and initial permissions.');
+        }
+
+        function viewSecurity() {
+            alert('Security Settings: Would display authentication policies, password requirements, session settings, and access controls.');
+        }
+
+        function viewHealth() {
+            window.open('http://localhost:8001/health', '_blank');
+        }
+
+        function systemSettings() {
+            alert('System Configuration: Would show global system settings, feature toggles, and operational parameters.');
+        }
+
+        function viewReports() {
+            alert('System Reports: Would generate comprehensive usage reports, performance metrics, and system analytics.');
+        }
+
+        function alertSettings() {
+            alert('Alert Configuration: Would open alert rule management, notification channels, and escalation procedures.');
+        }
+
+        function checkUpdates() {
+            alert('System Updates: Would check for available updates and security patches.');
+        }
+
+        function restartServices() {
+            if (confirm('This will restart all platform services. Continue?')) {
+                alert('Service restart initiated. System will be unavailable for 30-60 seconds.');
+                addLogEntry('Services restart initiated by admin');
+            }
+        }
+
+        function addLogEntry(message) {
+            const log = document.getElementById('action-log');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `
+                <span class="log-timestamp">${new Date().toLocaleString()}</span>
+                <span>${message}</span>
+            `;
+            log.insertBefore(entry, log.firstChild);
+        }
+
+        // Auto-update stats every 30 seconds
+        setInterval(() => {
+            document.getElementById('active-sessions').textContent = Math.floor(Math.random() * 10) + 20;
+            document.getElementById('storage-used').textContent = (2.4 + Math.random() * 0.1).toFixed(1) + 'TB';
+        }, 30000);
+
+        // Simulate some activity
+        setTimeout(() => {
+            addLogEntry('Admin console accessed from ' + window.location.host);
+        }, 1000);
+    </script>
+</body>
+</html>

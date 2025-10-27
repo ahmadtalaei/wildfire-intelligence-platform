@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Challenge 2 - Monitoring & Alerting Dashboard | CAL FIRE</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 20px 0;
+            text-align: center;
+            border-bottom: 3px solid #ff6b35;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            color: #ff6b35;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 25px;
+            padding: 30px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .monitoring-panel {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 25px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: transform 0.3s ease;
+        }
+
+        .monitoring-panel:hover {
+            transform: translateY(-5px);
+        }
+
+        .panel-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #ff6b35;
+        }
+
+        .panel-header i {
+            font-size: 2em;
+            color: #ff6b35;
+            margin-right: 15px;
+        }
+
+        .panel-header h3 {
+            font-size: 1.4em;
+            color: white;
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .metric-card {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .metric-value {
+            font-size: 2em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .metric-label {
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border-left: 4px solid;
+        }
+
+        .status-healthy {
+            background: rgba(46, 204, 113, 0.2);
+            border-left-color: #2ecc71;
+        }
+
+        .status-warning {
+            background: rgba(241, 196, 15, 0.2);
+            border-left-color: #f1c40f;
+        }
+
+        .status-critical {
+            background: rgba(231, 76, 60, 0.2);
+            border-left-color: #e74c3c;
+        }
+
+        .status-text {
+            flex-grow: 1;
+        }
+
+        .status-icon {
+            font-size: 1.2em;
+        }
+
+        .chart-container {
+            height: 200px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 15px 0;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .alert-list {
+            max-height: 250px;
+            overflow-y: auto;
+        }
+
+        .alert-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            margin: 8px 0;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-left: 4px solid;
+        }
+
+        .alert-high {
+            border-left-color: #e74c3c;
+        }
+
+        .alert-medium {
+            border-left-color: #f39c12;
+        }
+
+        .alert-low {
+            border-left-color: #3498db;
+        }
+
+        .alert-icon {
+            margin-right: 12px;
+            font-size: 1.2em;
+        }
+
+        .alert-content {
+            flex-grow: 1;
+        }
+
+        .alert-title {
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .alert-time {
+            font-size: 0.85em;
+            opacity: 0.7;
+        }
+
+        .navigation {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+
+        .nav-button {
+            background: rgba(255, 107, 53, 0.9);
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            margin-left: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .nav-button:hover {
+            background: #ff6b35;
+            transform: translateY(-2px);
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+
+        .live-indicator {
+            animation: pulse 2s infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="navigation">
+        <a href="http://localhost:3000" class="nav-button">
+            <i class="fas fa-home"></i> Main Platform
+        </a>
+        <a href="http://localhost:3020" class="nav-button">
+            <i class="fas fa-chart-line"></i> Grafana
+        </a>
+    </div>
+
+    <div class="header">
+        <h1><i class="fas fa-shield-alt"></i> Challenge 2: Monitoring & Alerting Dashboard</h1>
+        <p>Unified visibility into data flows, security alerts, and storage consumption</p>
+    </div>
+
+    <div class="dashboard-grid">
+        <!-- System Health Overview -->
+        <div class="monitoring-panel">
+            <div class="panel-header">
+                <i class="fas fa-heartbeat"></i>
+                <h3>System Health Overview</h3>
+            </div>
+            <div class="metric-grid">
+                <div class="metric-card">
+                    <div class="metric-value live-indicator" id="cpu-usage">78%</div>
+                    <div class="metric-label">CPU Usage</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value live-indicator" id="memory-usage">65%</div>
+                    <div class="metric-label">Memory</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value live-indicator" id="disk-usage">45%</div>
+                    <div class="metric-label">Disk Usage</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value live-indicator" id="network-io">2.4GB</div>
+                    <div class="metric-label">Network I/O</div>
+                </div>
+            </div>
+            <div class="status-indicator status-healthy">
+                <div class="status-text">All systems operational</div>
+                <i class="fas fa-check-circle status-icon"></i>
+            </div>
+        </div>
+
+        <!-- Data Flow Monitoring -->
+        <div class="monitoring-panel">
+            <div class="panel-header">
+                <i class="fas fa-stream"></i>
+                <h3>Data Flow Monitoring</h3>
+            </div>
+            <div class="metric-grid">
+                <div class="metric-card">
+                    <div class="metric-value live-indicator" id="data-ingested">1,247</div>
+                    <div class="metric-label">Records/Min</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value live-indicator" id="data-processed">98.7%</div>
+                    <div class="metric-label">Success Rate</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value live-indicator" id="queue-depth">23</div>
+                    <div class="metric-label">Queue Depth</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value live-indicator" id="latency">127ms</div>
+                    <div class="metric-label">Avg Latency</div>
+                </div>
+            </div>
+            <div class="chart-container">
+                <i class="fas fa-chart-area" style="font-size: 3em; opacity: 0.3;"></i>
+                <span style="margin-left: 15px; opacity: 0.7;">Real-time Data Flow Visualization</span>
+            </div>
+        </div>
+
+        <!-- Storage Consumption -->
+        <div class="monitoring-panel">
+            <div class="panel-header">
+                <i class="fas fa-database"></i>
+                <h3>Storage Consumption</h3>
+            </div>
+            <div class="metric-grid">
+                <div class="metric-card">
+                    <div class="metric-value live-indicator" id="total-storage">2.1TB</div>
+                    <div class="metric-label">Total Used</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value live-indicator" id="hot-storage">847GB</div>
+                    <div class="metric-label">Hot Storage</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value live-indicator" id="cold-storage">1.3TB</div>
+                    <div class="metric-label">Cold Storage</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value live-indicator" id="growth-rate">+12GB</div>
+                    <div class="metric-label">Daily Growth</div>
+                </div>
+            </div>
+            <div class="status-indicator status-warning">
+                <div class="status-text">Hot storage approaching 80% capacity</div>
+                <i class="fas fa-exclamation-triangle status-icon"></i>
+            </div>
+        </div>
+
+        <!-- Security Alerts -->
+        <div class="monitoring-panel">
+            <div class="panel-header">
+                <i class="fas fa-shield-alt"></i>
+                <h3>Security Alerts</h3>
+            </div>
+            <div class="metric-grid">
+                <div class="metric-card">
+                    <div class="metric-value live-indicator" id="security-events">5</div>
+                    <div class="metric-label">Active Alerts</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value live-indicator" id="threats-blocked">127</div>
+                    <div class="metric-label">Threats Blocked</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value live-indicator" id="auth-failures">3</div>
+                    <div class="metric-label">Auth Failures</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value live-indicator" id="security-score">94%</div>
+                    <div class="metric-label">Security Score</div>
+                </div>
+            </div>
+            <div class="alert-list">
+                <div class="alert-item alert-high">
+                    <i class="fas fa-exclamation-circle alert-icon" style="color: #e74c3c;"></i>
+                    <div class="alert-content">
+                        <div class="alert-title">Unusual Login Pattern Detected</div>
+                        <div class="alert-time">2 minutes ago</div>
+                    </div>
+                </div>
+                <div class="alert-item alert-medium">
+                    <i class="fas fa-exclamation-triangle alert-icon" style="color: #f39c12;"></i>
+                    <div class="alert-content">
+                        <div class="alert-title">Storage Access Spike</div>
+                        <div class="alert-time">15 minutes ago</div>
+                    </div>
+                </div>
+                <div class="alert-item alert-low">
+                    <i class="fas fa-info-circle alert-icon" style="color: #3498db;"></i>
+                    <div class="alert-content">
+                        <div class="alert-title">Scheduled Backup Completed</div>
+                        <div class="alert-time">1 hour ago</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Service Status -->
+        <div class="monitoring-panel">
+            <div class="panel-header">
+                <i class="fas fa-cogs"></i>
+                <h3>Service Status</h3>
+            </div>
+            <div class="status-indicator status-healthy">
+                <div class="status-text">Data Ingestion Service</div>
+                <i class="fas fa-check-circle status-icon"></i>
+            </div>
+            <div class="status-indicator status-healthy">
+                <div class="status-text">Analytics Engine</div>
+                <i class="fas fa-check-circle status-icon"></i>
+            </div>
+            <div class="status-indicator status-warning">
+                <div class="status-text">Notification Service</div>
+                <i class="fas fa-exclamation-triangle status-icon"></i>
+            </div>
+            <div class="status-indicator status-healthy">
+                <div class="status-text">API Gateway</div>
+                <i class="fas fa-check-circle status-icon"></i>
+            </div>
+            <div class="status-indicator status-healthy">
+                <div class="status-text">Database Cluster</div>
+                <i class="fas fa-check-circle status-icon"></i>
+            </div>
+            <div class="status-indicator status-critical">
+                <div class="status-text">Backup Service</div>
+                <i class="fas fa-times-circle status-icon"></i>
+            </div>
+        </div>
+
+        <!-- Performance Metrics -->
+        <div class="monitoring-panel">
+            <div class="panel-header">
+                <i class="fas fa-tachometer-alt"></i>
+                <h3>Performance Metrics</h3>
+            </div>
+            <div class="metric-grid">
+                <div class="metric-card">
+                    <div class="metric-value live-indicator" id="response-time">245ms</div>
+                    <div class="metric-label">Avg Response</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value live-indicator" id="throughput">3.2K</div>
+                    <div class="metric-label">Requests/sec</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value live-indicator" id="error-rate">0.12%</div>
+                    <div class="metric-label">Error Rate</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value live-indicator" id="uptime">99.97%</div>
+                    <div class="metric-label">Uptime</div>
+                </div>
+            </div>
+            <div class="chart-container">
+                <i class="fas fa-chart-line" style="font-size: 3em; opacity: 0.3;"></i>
+                <span style="margin-left: 15px; opacity: 0.7;">Performance Trends Chart</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Simulate live data updates
+        function updateMetrics() {
+            // CPU Usage
+            const cpuElement = document.getElementById('cpu-usage');
+            const currentCpu = parseInt(cpuElement.textContent);
+            const newCpu = Math.max(60, Math.min(90, currentCpu + (Math.random() - 0.5) * 10));
+            cpuElement.textContent = Math.round(newCpu) + '%';
+
+            // Memory Usage
+            const memElement = document.getElementById('memory-usage');
+            const currentMem = parseInt(memElement.textContent);
+            const newMem = Math.max(50, Math.min(80, currentMem + (Math.random() - 0.5) * 8));
+            memElement.textContent = Math.round(newMem) + '%';
+
+            // Data ingested
+            const dataElement = document.getElementById('data-ingested');
+            const currentData = parseInt(dataElement.textContent.replace(',', ''));
+            const newData = Math.max(1000, Math.min(1500, currentData + (Math.random() - 0.5) * 100));
+            dataElement.textContent = Math.round(newData).toLocaleString();
+
+            // Latency
+            const latencyElement = document.getElementById('latency');
+            const currentLatency = parseInt(latencyElement.textContent);
+            const newLatency = Math.max(100, Math.min(200, currentLatency + (Math.random() - 0.5) * 20));
+            latencyElement.textContent = Math.round(newLatency) + 'ms';
+
+            // Response time
+            const responseElement = document.getElementById('response-time');
+            const currentResponse = parseInt(responseElement.textContent);
+            const newResponse = Math.max(200, Math.min(300, currentResponse + (Math.random() - 0.5) * 30));
+            responseElement.textContent = Math.round(newResponse) + 'ms';
+
+            // Throughput
+            const throughputElement = document.getElementById('throughput');
+            const currentThroughput = parseFloat(throughputElement.textContent);
+            const newThroughput = Math.max(2.8, Math.min(3.8, currentThroughput + (Math.random() - 0.5) * 0.3));
+            throughputElement.textContent = newThroughput.toFixed(1) + 'K';
+        }
+
+        // Update metrics every 3 seconds
+        setInterval(updateMetrics, 3000);
+
+        // Initial load message
+        console.log('Challenge 2 Monitoring Dashboard loaded successfully');
+        console.log('Unified visibility into data flows, security alerts, and storage consumption');
+    </script>
+</body>
+</html>

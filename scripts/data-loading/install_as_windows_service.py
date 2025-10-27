@@ -1,0 +1,212 @@
+#!/usr/bin/env python3
+"""
+Install Wildfire Data Collection as Windows Service
+This allows the data collection to start automatically with Windows
+"""
+
+import os
+import sys
+import json
+from pathlib import Path
+
+def create_service_script():
+    """Create a service wrapper script"""
+    script_dir = Path(__file__).parent.absolute()
+    service_script = script_dir / "wildfire_service.py"
+    
+    service_code = f'''#!/usr/bin/env python3
+"""
+Wildfire Data Collection Windows Service
+"""
+
+import sys
+import time
+import logging
+from pathlib import Path
+
+# Add the data-loading directory to path
+sys.path.insert(0, r"{script_dir}")
+
+try:
+    import win32serviceutil
+    import win32service
+    import win32event
+    import servicemanager
+    import socket
+except ImportError:
+    print("[X] pywin32 not installed. Installing...")
+    import subprocess
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "pywin32"])
+    import win32serviceutil
+    import win32service
+    import win32event
+    import servicemanager
+    import socket
+
+from auto_start_all_collectors import CollectorManager
+
+class WildfireDataService(win32serviceutil.ServiceFramework):
+    _svc_name_ = "WildfireDataCollection"
+    _svc_display_name_ = "Wildfire Intelligence Data Collection"
+    _svc_description_ = "Automatically collects wildfire data from NASA FIRMS, NOAA, CAL FIRE, and IoT sensors"
+    
+    def __init__(self, args):
+        win32serviceutil.ServiceFramework.__init__(self, args)
+        self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
+        self.is_alive = True
+        
+        # Setup logging
+        log_path = Path(r"{script_dir}") / "service.log"
+        logging.basicConfig(
+            filename=str(log_path),
+            level=logging.INFO,
+            format='%(asctime)s - %(levelname)s - %(message)s'
+        )
+        self.logger = logging.getLogger(__name__)
+        
+    def SvcStop(self):
+        self.logger.info("🛑 Service stop requested")
+        self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
+        win32event.SetEvent(self.hWaitStop)
+        self.is_alive = False
+        
+    def SvcDoRun(self):
+        self.logger.info("[ROCKET] Wildfire Data Collection Service starting...")
+        servicemanager.LogMsg(servicemanager.EVENTLOG_INFORMATION_TYPE,
+                            servicemanager.PYS_SERVICE_STARTED,
+                            (self._svc_name_, ''))
+        
+        try:
+            # Start the collector manager
+            manager = CollectorManager()
+            
+            if manager.start_all_collectors():
+                self.logger.info("[CHECK] All collectors started successfully")
+                
+                # Monitor collectors until service stop
+                while self.is_alive:
+                    # Check for stop signal every 30 seconds
+                    if win32event.WaitForSingleObject(self.hWaitStop, 30000) == win32event.WAIT_OBJECT_0:
+                        break
+                        
+                    # Quick health check without full monitoring
+                    for name, config in manager.COLLECTORS.items():
+                        if not manager.check_collector_health(name, config):
+                            if config.get('restart_on_fail', True):
+                                self.logger.warning(f"🔄 Restarting {{config['description']}}...")
+                                manager.restart_collector(name, config)
+                
+                # Stop all collectors
+                manager.stop_all_collectors()
+                self.logger.info("[CHECK] Service stopped cleanly")
+                
+            else:
+                self.logger.error("[X] Failed to start collectors")
+                
+        except Exception as e:
+            self.logger.error(f"[X] Service error: {{e}}")
+            
+        servicemanager.LogMsg(servicemanager.EVENTLOG_INFORMATION_TYPE,
+                            servicemanager.PYS_SERVICE_STOPPED,
+                            (self._svc_name_, ''))
+
+if __name__ == '__main__':
+    if len(sys.argv) == 1:
+        servicemanager.Initialize()
+        servicemanager.PrepareToHostSingle(WildfireDataService)
+        servicemanager.StartServiceCtrlDispatcher()
+    else:
+        win32serviceutil.HandleCommandLine(WildfireDataService)
+'''
+    
+    with open(service_script, 'w') as f:
+        f.write(service_code)
+    
+    return service_script
+
+def install_service():
+    """Install the Windows service"""
+    print("[FIRE] Wildfire Data Collection - Windows Service Installer")
+    print("=" * 60)
+    
+    # Check if running as administrator
+    try:
+        import ctypes
+        if not ctypes.windll.shell32.IsUserAnAdmin():
+            print("[X] ERROR: This script must be run as Administrator")
+            print("Right-click Command Prompt and select 'Run as administrator'")
+            return False
+    except:
+        pass
+    
+    # Install pywin32 if needed
+    try:
+        import win32serviceutil
+    except ImportError:
+        print("📦 Installing pywin32...")
+        import subprocess
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "pywin32"])
+        print("[CHECK] pywin32 installed")
+    
+    # Create service script
+    print("[MEMO] Creating service script...")
+    service_script = create_service_script()
+    print(f"[CHECK] Service script created: {service_script}")
+    
+    # Create installation batch file
+    script_dir = Path(__file__).parent.absolute()
+    install_bat = script_dir / "install_service.bat"
+    
+    install_code = f'''@echo off
+REM Install Wildfire Data Collection Service
+
+echo Installing Wildfire Data Collection Service...
+cd /d "{script_dir}"
+python wildfire_service.py install
+
+if errorlevel 1 (
+    echo [X] Installation failed
+    pause
+    exit /b 1
+)
+
+echo [CHECK] Service installed successfully
+echo.
+echo Starting service...
+python wildfire_service.py start
+
+if errorlevel 1 (
+    echo [WARNING] Service installed but failed to start
+    echo You can start it manually from Services.msc
+) else (
+    echo [CHECK] Service started successfully
+)
+
+echo.
+echo Service Management Commands:
+echo   Start:   python wildfire_service.py start
+echo   Stop:    python wildfire_service.py stop
+echo   Remove:  python wildfire_service.py remove
+echo.
+pause
+'''
+    
+    with open(install_bat, 'w') as f:
+        f.write(install_code)
+    
+    print(f"[CHECK] Installation script created: {install_bat}")
+    print()
+    print("[DART] To install as Windows Service:")
+    print(f"   1. Open Command Prompt as Administrator")
+    print(f"   2. Run: {install_bat}")
+    print()
+    print("[GEAR] Or install manually:")
+    print(f"   cd \"{script_dir}\"")
+    print(f"   python wildfire_service.py install")
+    print(f"   python wildfire_service.py start")
+    print()
+    
+    return True
+
+if __name__ == "__main__":
+    install_service()

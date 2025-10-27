@@ -1,0 +1,458 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { Box, Typography, IconButton, Tooltip, Switch, FormControlLabel } from '@mui/material';
+import {
+  Visibility,
+  VisibilityOff,
+  Air,
+  Thermostat,
+  WaterDrop,
+  Speed
+} from '@mui/icons-material';
+
+interface WindyWeatherOverlayProps {
+  mapCenter: [number, number];
+  zoom: number;
+  selectedLayers: {
+    windVectors: boolean;
+    temperature: boolean;
+    humidity: boolean;
+    precipitation: boolean;
+  };
+  onLayerToggle: (layer: string) => void;
+}
+
+interface WindyData {
+  temperature?: number[][];
+  wind_u?: number[][];
+  wind_v?: number[][];
+  precipitation?: number[][];
+  humidity?: number[][];
+}
+
+const WindyWeatherOverlay: React.FC<WindyWeatherOverlayProps> = ({
+  mapCenter,
+  zoom,
+  selectedLayers,
+  onLayerToggle
+}) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [windyData, setWindyData] = useState<WindyData>({});
+  const [loading, setLoading] = useState(false);
+  const [showControls, setShowControls] = useState(true);
+
+  // Mock Windy API data (in production, replace with actual API calls)
+  useEffect(() => {
+    const fetchWindyData = async () => {
+      setLoading(true);
+
+      try {
+        // Simulate Windy API call
+        // const response = await fetch(`https://api.windy.com/api/point-forecast/v2?lat=${mapCenter[0]}&lon=${mapCenter[1]}&model=gfs&parameters=temp,wind,precip,rh&key=YOUR_API_KEY`);
+
+        // Mock realistic weather data
+        const mockData: WindyData = {
+          temperature: generateTemperatureField(mapCenter, 20, 20),
+          wind_u: generateWindField(mapCenter, 20, 20, 'u'),
+          wind_v: generateWindField(mapCenter, 20, 20, 'v'),
+          precipitation: generatePrecipitationField(mapCenter, 20, 20),
+          humidity: generateHumidityField(mapCenter, 20, 20)
+        };
+
+        setWindyData(mockData);
+      } catch (error) {
+        console.error('Failed to fetch Windy data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchWindyData();
+    const interval = setInterval(fetchWindyData, 300000); // Update every 5 minutes
+
+    return () => clearInterval(interval);
+  }, [mapCenter]);
+
+  // Generate realistic temperature field
+  const generateTemperatureField = (center: [number, number], width: number, height: number) => {
+    const field = [];
+    for (let i = 0; i < height; i++) {
+      const row = [];
+      for (let j = 0; j < width; j++) {
+        // Base temperature with spatial variation
+        const lat = center[0] + (i - height/2) * 0.05;
+        const lng = center[1] + (j - width/2) * 0.05;
+
+        // Temperature gradient with hotspots for fire areas
+        const baseTemp = 95 + Math.sin(lat * 0.1) * 10 + Math.cos(lng * 0.1) * 5;
+        const fireHotspot = Math.exp(-((i-10)**2 + (j-15)**2) / 50) * 20; // Hotspot near fire
+
+        row.push(baseTemp + fireHotspot + (Math.random() - 0.5) * 5);
+      }
+      field.push(row);
+    }
+    return field;
+  };
+
+  // Generate wind field components
+  const generateWindField = (center: [number, number], width: number, height: number, component: 'u' | 'v') => {
+    const field = [];
+    for (let i = 0; i < height; i++) {
+      const row = [];
+      for (let j = 0; j < width; j++) {
+        // Simulate wind patterns influenced by topography and pressure systems
+        const x = j - width/2;
+        const y = i - height/2;
+
+        if (component === 'u') {
+          // East-west wind component (positive = eastward)
+          row.push(15 + Math.sin(y * 0.3) * 8 + (Math.random() - 0.5) * 5);
+        } else {
+          // North-south wind component (positive = northward)
+          row.push(5 + Math.cos(x * 0.3) * 6 + (Math.random() - 0.5) * 4);
+        }
+      }
+      field.push(row);
+    }
+    return field;
+  };
+
+  // Generate precipitation field
+  const generatePrecipitationField = (center: [number, number], width: number, height: number) => {
+    const field = [];
+    for (let i = 0; i < height; i++) {
+      const row = [];
+      for (let j = 0; j < width; j++) {
+        // Very low precipitation (dry conditions for fire risk)
+        const precip = Math.max(0, Math.random() * 0.1 - 0.08);
+        row.push(precip);
+      }
+      field.push(row);
+    }
+    return field;
+  };
+
+  // Generate humidity field
+  const generateHumidityField = (center: [number, number], width: number, height: number) => {
+    const field = [];
+    for (let i = 0; i < height; i++) {
+      const row = [];
+      for (let j = 0; j < width; j++) {
+        // Low humidity (fire-prone conditions)
+        const humidity = 15 + Math.sin((i+j) * 0.2) * 8 + (Math.random() - 0.5) * 6;
+        row.push(Math.max(5, Math.min(35, humidity)));
+      }
+      field.push(row);
+    }
+    return field;
+  };
+
+  // Render temperature overlay
+  const renderTemperatureOverlay = () => {
+    if (!selectedLayers.temperature || !windyData.temperature) return null;
+
+    return (
+      <Box
+        sx={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 1,
+          pointerEvents: 'none'
+        }}
+      >
+        {windyData.temperature.map((row, i) =>
+          row.map((temp, j) => {
+            const x = (j / 20) * 100;
+            const y = (i / 20) * 100;
+            const intensity = Math.min(1, (temp - 80) / 40); // Normalize 80-120°F to 0-1
+
+            return (
+              <Box
+                key={`temp-${i}-${j}`}
+                sx={{
+                  position: 'absolute',
+                  left: `${x}%`,
+                  top: `${y}%`,
+                  width: '5%',
+                  height: '5%',
+                  background: `radial-gradient(circle,
+                    rgba(${255 * intensity}, ${100 * (1-intensity)}, 0, ${0.3 + intensity * 0.4}) 0%,
+                    transparent 70%)`,
+                  borderRadius: '50%'
+                }}
+              />
+            );
+          })
+        )}
+      </Box>
+    );
+  };
+
+  // Render wind vectors
+  const renderWindVectors = () => {
+    if (!selectedLayers.windVectors || !windyData.wind_u || !windyData.wind_v) return null;
+
+    return (
+      <Box
+        sx={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 2,
+          pointerEvents: 'none'
+        }}
+      >
+        {windyData.wind_u.map((row, i) =>
+          row.map((u, j) => {
+            if (i % 2 !== 0 || j % 2 !== 0) return null; // Thin out vectors
+
+            const v = windyData.wind_v?.[i]?.[j] || 0;
+            const speed = Math.sqrt(u * u + v * v);
+            const direction = Math.atan2(v, u) * (180 / Math.PI);
+
+            const x = (j / 20) * 100;
+            const y = (i / 20) * 100;
+            const length = Math.min(30, speed * 1.5);
+
+            const speedColor = speed > 25 ? '#FF4444' : speed > 15 ? '#FFAA44' : '#44AAFF';
+
+            return (
+              <Box
+                key={`wind-${i}-${j}`}
+                sx={{
+                  position: 'absolute',
+                  left: `${x}%`,
+                  top: `${y}%`,
+                  transform: `translate(-50%, -50%) rotate(${direction}deg)`,
+                  zIndex: 2
+                }}
+              >
+                <Box
+                  sx={{
+                    width: `${length}px`,
+                    height: '2px',
+                    background: `linear-gradient(90deg, ${speedColor} 0%, transparent 100%)`,
+                    filter: 'drop-shadow(0 0 1px rgba(255,255,255,0.5))',
+                    animation: 'windFlow 2s ease-in-out infinite',
+                    '&::after': {
+                      content: '""',
+                      position: 'absolute',
+                      right: '-3px',
+                      top: '-2px',
+                      width: 0,
+                      height: 0,
+                      borderLeft: `6px solid ${speedColor}`,
+                      borderTop: '3px solid transparent',
+                      borderBottom: '3px solid transparent'
+                    }
+                  }}
+                />
+              </Box>
+            );
+          })
+        )}
+      </Box>
+    );
+  };
+
+  // Render humidity overlay
+  const renderHumidityOverlay = () => {
+    if (!selectedLayers.humidity || !windyData.humidity) return null;
+
+    return (
+      <Box
+        sx={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 1,
+          pointerEvents: 'none'
+        }}
+      >
+        {windyData.humidity.map((row, i) =>
+          row.map((humidity, j) => {
+            const x = (j / 20) * 100;
+            const y = (i / 20) * 100;
+            const intensity = Math.max(0, (30 - humidity) / 25); // Invert - lower humidity = higher fire risk
+
+            return (
+              <Box
+                key={`humidity-${i}-${j}`}
+                sx={{
+                  position: 'absolute',
+                  left: `${x}%`,
+                  top: `${y}%`,
+                  width: '5%',
+                  height: '5%',
+                  background: `radial-gradient(circle,
+                    rgba(${255 * intensity}, ${100 + 155 * (1-intensity)}, ${255 * (1-intensity)}, ${0.2 + intensity * 0.3}) 0%,
+                    transparent 70%)`,
+                  borderRadius: '50%',
+                  animation: 'humidityPulse 4s ease-in-out infinite'
+                }}
+              />
+            );
+          })
+        )}
+      </Box>
+    );
+  };
+
+  return (
+    <Box ref={containerRef} sx={{ position: 'relative', width: '100%', height: '100%' }}>
+      {/* Weather Overlays */}
+      {renderTemperatureOverlay()}
+      {renderWindVectors()}
+      {renderHumidityOverlay()}
+
+      {/* Weather Data Controls */}
+      {showControls && (
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 10,
+            right: 10,
+            background: 'rgba(0, 0, 0, 0.8)',
+            borderRadius: 2,
+            padding: 1,
+            zIndex: 10
+          }}
+        >
+          <Typography variant="caption" sx={{ color: 'white', display: 'block', mb: 1 }}>
+            Weather Layers
+          </Typography>
+
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={selectedLayers.temperature}
+                  onChange={() => onLayerToggle('temperature')}
+                  size="small"
+                  sx={{
+                    '& .MuiSwitch-thumb': {
+                      backgroundColor: selectedLayers.temperature ? '#FF4500' : 'grey'
+                    }
+                  }}
+                />
+              }
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <Thermostat sx={{ fontSize: 14, color: 'white' }} />
+                  <Typography variant="caption" sx={{ color: 'white' }}>
+                    Temperature
+                  </Typography>
+                </Box>
+              }
+              sx={{ margin: 0 }}
+            />
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={selectedLayers.windVectors}
+                  onChange={() => onLayerToggle('windVectors')}
+                  size="small"
+                  sx={{
+                    '& .MuiSwitch-thumb': {
+                      backgroundColor: selectedLayers.windVectors ? '#44AAFF' : 'grey'
+                    }
+                  }}
+                />
+              }
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <Air sx={{ fontSize: 14, color: 'white' }} />
+                  <Typography variant="caption" sx={{ color: 'white' }}>
+                    Wind
+                  </Typography>
+                </Box>
+              }
+              sx={{ margin: 0 }}
+            />
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={selectedLayers.humidity}
+                  onChange={() => onLayerToggle('humidity')}
+                  size="small"
+                  sx={{
+                    '& .MuiSwitch-thumb': {
+                      backgroundColor: selectedLayers.humidity ? '#66CCFF' : 'grey'
+                    }
+                  }}
+                />
+              }
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <WaterDrop sx={{ fontSize: 14, color: 'white' }} />
+                  <Typography variant="caption" sx={{ color: 'white' }}>
+                    Humidity
+                  </Typography>
+                </Box>
+              }
+              sx={{ margin: 0 }}
+            />
+          </Box>
+
+          {/* Current Weather Stats */}
+          <Box sx={{ mt: 1, pt: 1, borderTop: '1px solid rgba(255,255,255,0.2)' }}>
+            <Typography variant="caption" sx={{ color: 'white', display: 'block' }}>
+              Current Conditions:
+            </Typography>
+            <Typography variant="caption" sx={{ color: '#FF6B6B', display: 'block' }}>
+              🌡️ 105°F | 💨 25mph NE | 💧 12% RH
+            </Typography>
+            <Typography variant="caption" sx={{ color: '#FFAA44', display: 'block' }}>
+              ⚠️ Critical Fire Weather
+            </Typography>
+          </Box>
+        </Box>
+      )}
+
+      {/* Toggle Controls Visibility */}
+      <IconButton
+        onClick={() => setShowControls(!showControls)}
+        sx={{
+          position: 'absolute',
+          top: 10,
+          right: showControls ? 220 : 10,
+          background: 'rgba(0, 0, 0, 0.8)',
+          color: 'white',
+          zIndex: 11,
+          '&:hover': {
+            background: 'rgba(0, 0, 0, 0.9)'
+          }
+        }}
+        size="small"
+      >
+        {showControls ? <VisibilityOff /> : <Visibility />}
+      </IconButton>
+
+      {/* CSS Animations */}
+      <style>
+        {`
+          @keyframes windFlow {
+            0% { opacity: 0.6; transform: translateX(-5px); }
+            50% { opacity: 1; transform: translateX(0px); }
+            100% { opacity: 0.6; transform: translateX(5px); }
+          }
+
+          @keyframes humidityPulse {
+            0%, 100% { opacity: 0.3; transform: scale(1); }
+            50% { opacity: 0.6; transform: scale(1.1); }
+          }
+        `}
+      </style>
+    </Box>
+  );
+};
+
+export default WindyWeatherOverlay;

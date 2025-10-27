@@ -1,0 +1,1047 @@
+/**
+ * Enhanced Fire Predictions Dashboard Component
+ * 
+ * Real-time fire spread predictions using Google Research methodologies:
+ * - FireSat satellite integration
+ * - AI boundary tracking
+ * - Next-day spread visualization
+ * - Multi-source prediction ensemble
+ * 
+ * Author: Wildfire Intelligence Team
+ * Integration: Google Research FireSat + Boundary Tracking
+ */
+
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+  Box,
+  Card,
+  CardContent,
+  Typography,
+  Grid,
+  Button,
+  Chip,
+  Alert,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  LinearProgress,
+  Badge,
+  IconButton,
+  Tooltip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Switch,
+  FormControlLabel,
+} from '@mui/material';
+import {
+  Warning,
+  TrendingUp,
+  TrendingDown,
+  Speed,
+  Thermostat,
+  Air,
+  Visibility,
+  Satellite,
+  Timeline,
+  Map,
+  NotificationsActive,
+  Refresh,
+  Settings,
+  Download,
+  Share,
+} from '@mui/icons-material';
+import { styled } from '@mui/material/styles';
+import { MapContainer, TileLayer, Polygon, Marker, Popup, Circle } from 'react-leaflet';
+import { LatLngTuple } from 'leaflet';
+import {
+  LineChart,
+  Line,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend,
+  ResponsiveContainer,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Radar,
+  BarChart,
+  Bar,
+} from 'recharts';
+import { format, addHours, parseISO } from 'date-fns';
+
+// Types
+interface FireSpreadPrediction {
+  prediction_id: string;
+  timestamp: string;
+  model_version: string;
+  confidence: number;
+  
+  current_perimeter: any; // GeoJSON
+  predicted_perimeter_24h: any; // GeoJSON
+  predicted_perimeter_48h: any; // GeoJSON
+  
+  spread_probability: number;
+  intensity_prediction: number;
+  growth_rate_prediction: number;
+  
+  primary_spread_directions: string[];
+  spread_distances: Record<string, number>;
+  
+  contributing_factors: Record<string, number>;
+  weather_influence: number;
+  terrain_influence: number;
+  fuel_influence: number;
+  
+  prediction_uncertainty: Record<string, number>;
+  confidence_intervals: Record<string, [number, number]>;
+}
+
+interface FireSatDetection {
+  detection_id: string;
+  latitude: number;
+  longitude: number;
+  confidence: number;
+  fire_size_estimate?: number;
+  temperature_estimate?: number;
+  satellite_name: string;
+  detection_time: string;
+  image_resolution: number;
+}
+
+interface BoundaryUpdate {
+  boundary_id: string;
+  fire_perimeter: any; // GeoJSON
+  total_area: number;
+  perimeter_length: number;
+  growth_rate?: number;
+  model_version: string;
+  analysis_timestamp: string;
+}
+
+interface EnhancedPredictionsProps {
+  predictions: FireSpreadPrediction[];
+  firesatDetections: FireSatDetection[];
+  boundaryUpdates: BoundaryUpdate[];
+  isLoading?: boolean;
+  onRequestUpdate?: () => void;
+  onConfigureAlerts?: () => void;
+}
+
+// Styled components
+const PredictionCard = styled(Card)(({ theme }) => ({
+  height: '100%',
+  position: 'relative',
+  transition: 'all 0.3s ease',
+  '&:hover': {
+    transform: 'translateY(-2px)',
+    boxShadow: theme.shadows[8],
+  },
+}));
+
+const MetricCard = styled(Card)(({ theme }) => ({
+  background: `linear-gradient(135deg, ${theme.palette.primary.main}20 0%, ${theme.palette.secondary.main}20 100%)`,
+  border: `1px solid ${theme.palette.divider}`,
+}));
+
+const AlertCard = styled(Card)(({ theme }) => ({
+  background: `linear-gradient(135deg, ${theme.palette.error.main}20 0%, ${theme.palette.warning.main}20 100%)`,
+  border: `1px solid ${theme.palette.error.main}`,
+}));
+
+const MapCard = styled(Card)(({ theme }) => ({
+  height: '600px',
+  '& .leaflet-container': {
+    height: '100%',
+    borderRadius: theme.shape.borderRadius,
+  },
+}));
+
+// Helper functions
+const getRiskLevel = (probability: number): { level: string; color: string; icon: React.ReactNode } => {
+  if (probability >= 0.8) return { level: 'Critical', color: 'error', icon: <Warning /> };
+  if (probability >= 0.6) return { level: 'High', color: 'warning', icon: <TrendingUp /> };
+  if (probability >= 0.4) return { level: 'Moderate', color: 'info', icon: <Timeline /> };
+  return { level: 'Low', color: 'success', icon: <TrendingDown /> };
+};
+
+const formatDirection = (directions: string[]): string => {
+  const dirMap: Record<string, string> = {
+    N: 'North', NE: 'Northeast', E: 'East', SE: 'Southeast',
+    S: 'South', SW: 'Southwest', W: 'West', NW: 'Northwest'
+  };
+  return directions.map(d => dirMap[d] || d).join(', ');
+};
+
+const getConfidenceColor = (confidence: number): string => {
+  if (confidence >= 0.9) return 'success';
+  if (confidence >= 0.7) return 'warning';
+  return 'error';
+};
+
+// Sub-components
+const PredictionSummary: React.FC<{ prediction: FireSpreadPrediction }> = ({ prediction }) => {
+  const riskLevel = getRiskLevel(prediction.spread_probability);
+  
+  return (
+    <MetricCard>
+      <CardContent>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+          <Box sx={{ color: `${riskLevel.color}.main`, mr: 1 }}>
+            {riskLevel.icon}
+          </Box>
+          <Typography variant="h6" component="div">
+            {riskLevel.level} Risk
+          </Typography>
+          <Chip
+            label={`${(prediction.confidence * 100).toFixed(0)}% Confidence`}
+            color={getConfidenceColor(prediction.confidence) as any}
+            size="small"
+            sx={{ ml: 'auto' }}
+          />
+        </Box>
+
+        <Grid container spacing={2}>
+          <Grid item xs={6}>
+            <Typography variant="body2" color="text.secondary">
+              Spread Probability
+            </Typography>
+            <Typography variant="h4">
+              {(prediction.spread_probability * 100).toFixed(0)}%
+            </Typography>
+          </Grid>
+          <Grid item xs={6}>
+            <Typography variant="body2" color="text.secondary">
+              Growth Rate
+            </Typography>
+            <Typography variant="h4">
+              {prediction.growth_rate_prediction.toFixed(1)}
+              <Typography variant="caption" component="span" sx={{ ml: 0.5 }}>
+                ha/h
+              </Typography>
+            </Typography>
+          </Grid>
+          <Grid item xs={6}>
+            <Typography variant="body2" color="text.secondary">
+              Intensity
+            </Typography>
+            <Typography variant="h5">
+              {prediction.intensity_prediction.toFixed(1)}
+              <Typography variant="caption" component="span" sx={{ ml: 0.5 }}>
+                MW/m
+              </Typography>
+            </Typography>
+          </Grid>
+          <Grid item xs={6}>
+            <Typography variant="body2" color="text.secondary">
+              Primary Direction
+            </Typography>
+            <Typography variant="body1">
+              {formatDirection(prediction.primary_spread_directions.slice(0, 2))}
+            </Typography>
+          </Grid>
+        </Grid>
+
+        <Box sx={{ mt: 2 }}>
+          <Typography variant="body2" color="text.secondary" gutterBottom>
+            Model Confidence
+          </Typography>
+          <LinearProgress
+            variant="determinate"
+            value={prediction.confidence * 100}
+            color={getConfidenceColor(prediction.confidence) as any}
+            sx={{ height: 8, borderRadius: 4 }}
+          />
+        </Box>
+      </CardContent>
+    </MetricCard>
+  );
+};
+
+const InfluenceFactorsChart: React.FC<{ prediction: FireSpreadPrediction }> = ({ prediction }) => {
+  const factorData = [
+    {
+      factor: 'Weather',
+      influence: prediction.weather_influence * 100,
+      fullMark: 100,
+    },
+    {
+      factor: 'Terrain',
+      influence: prediction.terrain_influence * 100,
+      fullMark: 100,
+    },
+    {
+      factor: 'Fuel',
+      influence: prediction.fuel_influence * 100,
+      fullMark: 100,
+    },
+  ];
+
+  return (
+    <PredictionCard>
+      <CardContent>
+        <Typography variant="h6" gutterBottom>
+          Contributing Factors
+        </Typography>
+        <ResponsiveContainer width="100%" height={200}>
+          <RadarChart data={factorData}>
+            <PolarGrid />
+            <PolarAngleAxis dataKey="factor" />
+            <PolarRadiusAxis angle={30} domain={[0, 100]} />
+            <Radar
+              name="Influence"
+              dataKey="influence"
+              stroke="#8884d8"
+              fill="#8884d8"
+              fillOpacity={0.3}
+            />
+          </RadarChart>
+        </ResponsiveContainer>
+        
+        <List dense>
+          <ListItem>
+            <ListItemIcon>
+              <Air color="primary" />
+            </ListItemIcon>
+            <ListItemText
+              primary="Weather Influence"
+              secondary={`${(prediction.weather_influence * 100).toFixed(0)}% - Wind, humidity, temperature`}
+            />
+          </ListItem>
+          <ListItem>
+            <ListItemIcon>
+              <Map color="secondary" />
+            </ListItemIcon>
+            <ListItemText
+              primary="Terrain Influence"
+              secondary={`${(prediction.terrain_influence * 100).toFixed(0)}% - Slope, elevation, aspect`}
+            />
+          </ListItem>
+          <ListItem>
+            <ListItemIcon>
+              <Thermostat color="warning" />
+            </ListItemIcon>
+            <ListItemText
+              primary="Fuel Influence"
+              secondary={`${(prediction.fuel_influence * 100).toFixed(0)}% - Vegetation type, moisture content`}
+            />
+          </ListItem>
+        </List>
+      </CardContent>
+    </PredictionCard>
+  );
+};
+
+const FireSatIntegration: React.FC<{ detections: FireSatDetection[] }> = ({ detections }) => {
+  const latestDetections = useMemo(() => {
+    return detections
+      .sort((a, b) => new Date(b.detection_time).getTime() - new Date(a.detection_time).getTime())
+      .slice(0, 5);
+  }, [detections]);
+
+  const averageConfidence = useMemo(() => {
+    if (!detections.length) return 0;
+    return detections.reduce((sum, d) => sum + d.confidence, 0) / detections.length;
+  }, [detections]);
+
+  return (
+    <PredictionCard>
+      <CardContent>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+          <Satellite color="primary" sx={{ mr: 1 }} />
+          <Typography variant="h6">
+            FireSat Integration
+          </Typography>
+          <Badge badgeContent={detections.length} color="secondary" sx={{ ml: 'auto' }}>
+            <Chip label="Active" color="success" size="small" />
+          </Badge>
+        </Box>
+
+        <Typography variant="body2" color="text.secondary" gutterBottom>
+          Real-time satellite fire detection from Google's FireSat constellation
+        </Typography>
+
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="subtitle2" gutterBottom>
+            Detection Confidence: {(averageConfidence * 100).toFixed(0)}%
+          </Typography>
+          <LinearProgress
+            variant="determinate"
+            value={averageConfidence * 100}
+            color="primary"
+            sx={{ height: 6, borderRadius: 3 }}
+          />
+        </Box>
+
+        <Typography variant="subtitle2" gutterBottom>
+          Latest Detections
+        </Typography>
+        
+        {latestDetections.length > 0 ? (
+          <List dense>
+            {latestDetections.map((detection) => (
+              <ListItem key={detection.detection_id} sx={{ px: 0 }}>
+                <ListItemIcon>
+                  <Visibility />
+                </ListItemIcon>
+                <ListItemText
+                  primary={
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Typography variant="body2">
+                        {detection.satellite_name}
+                      </Typography>
+                      <Chip
+                        label={`${(detection.confidence * 100).toFixed(0)}%`}
+                        color={getConfidenceColor(detection.confidence) as any}
+                        size="small"
+                        sx={{ ml: 1 }}
+                      />
+                    </Box>
+                  }
+                  secondary={
+                    <Box>
+                      <Typography variant="caption" display="block">
+                        {format(parseISO(detection.detection_time), 'MMM dd, HH:mm')}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {detection.fire_size_estimate ? `${detection.fire_size_estimate.toFixed(1)} ha` : 'Size: Unknown'} *{' '}
+                        {detection.temperature_estimate ? `${(detection.temperature_estimate - 273.15).toFixed(0)}degC` : 'Temp: N/A'}
+                      </Typography>
+                    </Box>
+                  }
+                />
+              </ListItem>
+            ))}
+          </List>
+        ) : (
+          <Alert severity="info" sx={{ mt: 1 }}>
+            No recent FireSat detections available
+          </Alert>
+        )}
+      </CardContent>
+    </PredictionCard>
+  );
+};
+
+const BoundaryTrackingPanel: React.FC<{ updates: BoundaryUpdate[] }> = ({ updates }) => {
+  const latestUpdate = useMemo(() => {
+    return updates.sort((a, b) => 
+      new Date(b.analysis_timestamp).getTime() - new Date(a.analysis_timestamp).getTime()
+    )[0];
+  }, [updates]);
+
+  const areaGrowthData = useMemo(() => {
+    return updates
+      .sort((a, b) => new Date(a.analysis_timestamp).getTime() - new Date(b.analysis_timestamp).getTime())
+      .map((update, index) => ({
+        time: format(parseISO(update.analysis_timestamp), 'HH:mm'),
+        area: update.total_area,
+        perimeter: update.perimeter_length / 1000, // Convert to km
+        growthRate: update.growth_rate || 0,
+        timestamp: update.analysis_timestamp
+      }));
+  }, [updates]);
+
+  return (
+    <PredictionCard>
+      <CardContent>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+          <Map color="secondary" sx={{ mr: 1 }} />
+          <Typography variant="h6">
+            AI Boundary Tracking
+          </Typography>
+          <Chip 
+            label={`${updates.length} Updates`} 
+            color="info" 
+            size="small" 
+            sx={{ ml: 'auto' }} 
+          />
+        </Box>
+
+        {latestUpdate ? (
+          <Box>
+            <Typography variant="body2" color="text.secondary" gutterBottom>
+              Latest boundary analysis using Google's AI methodology
+            </Typography>
+
+            <Grid container spacing={2} sx={{ mb: 2 }}>
+              <Grid item xs={6}>
+                <Typography variant="body2" color="text.secondary">
+                  Total Area
+                </Typography>
+                <Typography variant="h5">
+                  {latestUpdate.total_area.toFixed(1)}
+                  <Typography variant="caption" component="span" sx={{ ml: 0.5 }}>
+                    ha
+                  </Typography>
+                </Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography variant="body2" color="text.secondary">
+                  Perimeter
+                </Typography>
+                <Typography variant="h5">
+                  {(latestUpdate.perimeter_length / 1000).toFixed(1)}
+                  <Typography variant="caption" component="span" sx={{ ml: 0.5 }}>
+                    km
+                  </Typography>
+                </Typography>
+              </Grid>
+              {latestUpdate.growth_rate && (
+                <Grid item xs={12}>
+                  <Typography variant="body2" color="text.secondary">
+                    Growth Rate
+                  </Typography>
+                  <Typography variant="h6" color={latestUpdate.growth_rate > 0 ? 'error.main' : 'success.main'}>
+                    {latestUpdate.growth_rate > 0 ? '+' : ''}{latestUpdate.growth_rate.toFixed(1)} ha/h
+                  </Typography>
+                </Grid>
+              )}
+            </Grid>
+
+            {areaGrowthData.length > 1 && (
+              <Box sx={{ height: 150 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Area Growth Trend
+                </Typography>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={areaGrowthData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="time" />
+                    <YAxis />
+                    <RechartsTooltip />
+                    <Area
+                      type="monotone"
+                      dataKey="area"
+                      stroke="#8884d8"
+                      fill="#8884d8"
+                      fillOpacity={0.3}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </Box>
+            )}
+          </Box>
+        ) : (
+          <Alert severity="info">
+            No boundary tracking data available
+          </Alert>
+        )}
+      </CardContent>
+    </PredictionCard>
+  );
+};
+
+const PredictionMap: React.FC<{ prediction: FireSpreadPrediction; detections: FireSatDetection[] }> = ({ 
+  prediction, 
+  detections 
+}) => {
+  const [mapCenter, setMapCenter] = useState<LatLngTuple>([34.0522, -118.2437]); // Default to LA
+  const [showDetections, setShowDetections] = useState(true);
+  const [show24hPrediction, setShow24hPrediction] = useState(true);
+  const [show48hPrediction, setShow48hPrediction] = useState(false);
+
+  // Extract coordinates from GeoJSON
+  const currentPerimeterCoords = useMemo(() => {
+    if (!prediction.current_perimeter?.coordinates) return [];
+    return prediction.current_perimeter.coordinates[0]?.map((coord: number[]) => [coord[1], coord[0]] as LatLngTuple);
+  }, [prediction.current_perimeter]);
+
+  const predicted24hCoords = useMemo(() => {
+    if (!prediction.predicted_perimeter_24h?.coordinates) return [];
+    return prediction.predicted_perimeter_24h.coordinates[0]?.map((coord: number[]) => [coord[1], coord[0]] as LatLngTuple);
+  }, [prediction.predicted_perimeter_24h]);
+
+  const predicted48hCoords = useMemo(() => {
+    if (!prediction.predicted_perimeter_48h?.coordinates) return [];
+    return prediction.predicted_perimeter_48h.coordinates[0]?.map((coord: number[]) => [coord[1], coord[0]] as LatLngTuple);
+  }, [prediction.predicted_perimeter_48h]);
+
+  // Update map center based on current fire perimeter
+  useEffect(() => {
+    if (currentPerimeterCoords.length > 0) {
+      const centerLat = currentPerimeterCoords.reduce((sum: number, coord: [number, number]) => sum + coord[0], 0) / currentPerimeterCoords.length;
+      const centerLon = currentPerimeterCoords.reduce((sum: number, coord: [number, number]) => sum + coord[1], 0) / currentPerimeterCoords.length;
+      setMapCenter([centerLat, centerLon]);
+    }
+  }, [currentPerimeterCoords]);
+
+  return (
+    <MapCard>
+      <CardContent sx={{ p: 1, height: '100%' }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+          <Typography variant="h6">
+            Fire Spread Prediction Map
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={showDetections}
+                  onChange={(e) => setShowDetections(e.target.checked)}
+                  size="small"
+                />
+              }
+              label="FireSat"
+              sx={{ mr: 1 }}
+            />
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={show24hPrediction}
+                  onChange={(e) => setShow24hPrediction(e.target.checked)}
+                  size="small"
+                />
+              }
+              label="24h"
+              sx={{ mr: 1 }}
+            />
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={show48hPrediction}
+                  onChange={(e) => setShow48hPrediction(e.target.checked)}
+                  size="small"
+                />
+              }
+              label="48h"
+            />
+          </Box>
+        </Box>
+
+        <MapContainer 
+          center={mapCenter} 
+          zoom={12} 
+          style={{ height: 'calc(100% - 60px)' }}
+        >
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+          
+          {/* Current fire perimeter */}
+          {currentPerimeterCoords.length > 0 && (
+            <Polygon
+              positions={currentPerimeterCoords}
+              pathOptions={{
+                color: 'red',
+                weight: 3,
+                fillColor: 'red',
+                fillOpacity: 0.3,
+              }}
+            >
+              <Popup>
+                <div>
+                  <strong>Current Fire Perimeter</strong><br/>
+                  Confidence: {(prediction.confidence * 100).toFixed(0)}%<br/>
+                  Last Updated: {format(parseISO(prediction.timestamp), 'MMM dd, HH:mm')}
+                </div>
+              </Popup>
+            </Polygon>
+          )}
+
+          {/* 24-hour prediction */}
+          {show24hPrediction && predicted24hCoords.length > 0 && (
+            <Polygon
+              positions={predicted24hCoords}
+              pathOptions={{
+                color: 'orange',
+                weight: 2,
+                dashArray: '5, 5',
+                fillColor: 'orange',
+                fillOpacity: 0.1,
+              }}
+            >
+              <Popup>
+                <div>
+                  <strong>24-Hour Prediction</strong><br/>
+                  Growth Rate: {prediction.growth_rate_prediction.toFixed(1)} ha/h<br/>
+                  Spread Probability: {(prediction.spread_probability * 100).toFixed(0)}%
+                </div>
+              </Popup>
+            </Polygon>
+          )}
+
+          {/* 48-hour prediction */}
+          {show48hPrediction && predicted48hCoords.length > 0 && (
+            <Polygon
+              positions={predicted48hCoords}
+              pathOptions={{
+                color: 'yellow',
+                weight: 2,
+                dashArray: '10, 5',
+                fillColor: 'yellow',
+                fillOpacity: 0.1,
+              }}
+            >
+              <Popup>
+                <div>
+                  <strong>48-Hour Prediction</strong><br/>
+                  Extended forecast based on weather patterns
+                </div>
+              </Popup>
+            </Polygon>
+          )}
+
+          {/* FireSat detections */}
+          {showDetections && detections.map((detection) => (
+            <Marker
+              key={detection.detection_id}
+              position={[detection.latitude, detection.longitude]}
+            >
+              <Popup>
+                <div>
+                  <strong>FireSat Detection</strong><br/>
+                  Satellite: {detection.satellite_name}<br/>
+                  Confidence: {(detection.confidence * 100).toFixed(0)}%<br/>
+                  {detection.fire_size_estimate && (
+                    <>Size: {detection.fire_size_estimate.toFixed(1)} ha<br/></>
+                  )}
+                  {detection.temperature_estimate && (
+                    <>Temperature: {(detection.temperature_estimate - 273.15).toFixed(0)}degC<br/></>
+                  )}
+                  Detected: {format(parseISO(detection.detection_time), 'MMM dd, HH:mm')}
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+        </MapContainer>
+      </CardContent>
+    </MapCard>
+  );
+};
+
+// Main component
+export const EnhancedPredictions: React.FC<EnhancedPredictionsProps> = ({
+  predictions,
+  firesatDetections,
+  boundaryUpdates,
+  isLoading = false,
+  onRequestUpdate,
+  onConfigureAlerts,
+}) => {
+  const [selectedPrediction, setSelectedPrediction] = useState<FireSpreadPrediction | null>(null);
+  const [alertDialogOpen, setAlertDialogOpen] = useState(false);
+
+  // Get latest prediction
+  const latestPrediction = useMemo(() => {
+    return predictions.sort((a, b) => 
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    )[0];
+  }, [predictions]);
+
+  // Get recent detections (last 24 hours)
+  const recentDetections = useMemo(() => {
+    const twentyFourHoursAgo = new Date();
+    twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+    
+    return firesatDetections.filter(detection => 
+      new Date(detection.detection_time) > twentyFourHoursAgo
+    );
+  }, [firesatDetections]);
+
+  // Generate prediction timeline
+  const predictionTimeline = useMemo(() => {
+    return predictions
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+      .slice(-24) // Last 24 predictions
+      .map(prediction => ({
+        time: format(parseISO(prediction.timestamp), 'HH:mm'),
+        spreadProbability: prediction.spread_probability * 100,
+        confidence: prediction.confidence * 100,
+        growthRate: prediction.growth_rate_prediction,
+        intensity: prediction.intensity_prediction,
+        timestamp: prediction.timestamp
+      }));
+  }, [predictions]);
+
+  const handleExportData = useCallback(() => {
+    const exportData = {
+      predictions: predictions,
+      firesat_detections: recentDetections,
+      boundary_updates: boundaryUpdates,
+      export_timestamp: new Date().toISOString()
+    };
+    
+    const dataStr = JSON.stringify(exportData, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `fire_predictions_${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }, [predictions, recentDetections, boundaryUpdates]);
+
+  if (!latestPrediction) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Alert severity="info">
+          No fire predictions available. Enhanced prediction system is ready to analyze fire data.
+        </Alert>
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ p: 2 }}>
+      {/* Header */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Box>
+          <Typography variant="h4" component="h1" gutterBottom>
+            Enhanced Fire Predictions
+          </Typography>
+          <Typography variant="subtitle1" color="text.secondary">
+            Real-time predictions powered by Google Research methodologies
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant="outlined"
+            startIcon={<Download />}
+            onClick={handleExportData}
+            disabled={isLoading}
+          >
+            Export
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<NotificationsActive />}
+            onClick={onConfigureAlerts}
+          >
+            Alerts
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<Refresh />}
+            onClick={onRequestUpdate}
+            disabled={isLoading}
+          >
+            {isLoading ? 'Updating...' : 'Refresh'}
+          </Button>
+        </Box>
+      </Box>
+
+      {/* Active Alerts */}
+      {latestPrediction.spread_probability >= 0.7 && (
+        <AlertCard sx={{ mb: 3 }}>
+          <CardContent>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <Warning color="error" sx={{ mr: 2 }} />
+              <Box>
+                <Typography variant="h6" color="error">
+                  High Fire Risk Alert
+                </Typography>
+                <Typography variant="body2">
+                  Fire spread probability is {(latestPrediction.spread_probability * 100).toFixed(0)}% 
+                  with {formatDirection(latestPrediction.primary_spread_directions)} spread direction.
+                  Growth rate: {latestPrediction.growth_rate_prediction.toFixed(1)} ha/h
+                </Typography>
+              </Box>
+              <Button
+                variant="contained"
+                color="error"
+                sx={{ ml: 'auto' }}
+                onClick={() => setAlertDialogOpen(true)}
+              >
+                View Details
+              </Button>
+            </Box>
+          </CardContent>
+        </AlertCard>
+      )}
+
+      <Grid container spacing={3}>
+        {/* Prediction Summary */}
+        <Grid item xs={12} md={6} lg={3}>
+          <PredictionSummary prediction={latestPrediction} />
+        </Grid>
+
+        {/* FireSat Integration */}
+        <Grid item xs={12} md={6} lg={3}>
+          <FireSatIntegration detections={recentDetections} />
+        </Grid>
+
+        {/* Boundary Tracking */}
+        <Grid item xs={12} md={6} lg={3}>
+          <BoundaryTrackingPanel updates={boundaryUpdates} />
+        </Grid>
+
+        {/* Influence Factors */}
+        <Grid item xs={12} md={6} lg={3}>
+          <InfluenceFactorsChart prediction={latestPrediction} />
+        </Grid>
+
+        {/* Prediction Map */}
+        <Grid item xs={12} lg={8}>
+          <PredictionMap 
+            prediction={latestPrediction} 
+            detections={recentDetections} 
+          />
+        </Grid>
+
+        {/* Prediction Timeline */}
+        <Grid item xs={12} lg={4}>
+          <PredictionCard>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Prediction Timeline
+              </Typography>
+              {predictionTimeline.length > 0 ? (
+                <Box sx={{ height: 400 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={predictionTimeline}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="time" />
+                      <YAxis yAxisId="left" />
+                      <YAxis yAxisId="right" orientation="right" />
+                      <RechartsTooltip />
+                      <Legend />
+                      <Line
+                        yAxisId="left"
+                        type="monotone"
+                        dataKey="spreadProbability"
+                        stroke="#ff7300"
+                        name="Spread Probability (%)"
+                        strokeWidth={2}
+                      />
+                      <Line
+                        yAxisId="left"
+                        type="monotone"
+                        dataKey="confidence"
+                        stroke="#8884d8"
+                        name="Confidence (%)"
+                        strokeWidth={2}
+                      />
+                      <Line
+                        yAxisId="right"
+                        type="monotone"
+                        dataKey="growthRate"
+                        stroke="#82ca9d"
+                        name="Growth Rate (ha/h)"
+                        strokeWidth={2}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </Box>
+              ) : (
+                <Alert severity="info">
+                  No historical prediction data available
+                </Alert>
+              )}
+            </CardContent>
+          </PredictionCard>
+        </Grid>
+      </Grid>
+
+      {/* Alert Details Dialog */}
+      <Dialog
+        open={alertDialogOpen}
+        onClose={() => setAlertDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Fire Risk Alert Details</DialogTitle>
+        <DialogContent>
+          <Typography variant="h6" gutterBottom>
+            Current Risk Assessment
+          </Typography>
+          <Typography paragraph>
+            The enhanced prediction system has identified a high fire risk situation based on 
+            multiple data sources including FireSat satellite detections and AI boundary tracking.
+          </Typography>
+          
+          <TableContainer component={Paper} sx={{ mt: 2 }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Metric</TableCell>
+                  <TableCell align="right">Value</TableCell>
+                  <TableCell>Assessment</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                <TableRow>
+                  <TableCell>Spread Probability</TableCell>
+                  <TableCell align="right">
+                    {(latestPrediction.spread_probability * 100).toFixed(0)}%
+                  </TableCell>
+                  <TableCell>
+                    <Chip 
+                      label={getRiskLevel(latestPrediction.spread_probability).level} 
+                      color={getRiskLevel(latestPrediction.spread_probability).color as any}
+                      size="small"
+                    />
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell>Growth Rate</TableCell>
+                  <TableCell align="right">
+                    {latestPrediction.growth_rate_prediction.toFixed(1)} ha/h
+                  </TableCell>
+                  <TableCell>
+                    <Chip 
+                      label={latestPrediction.growth_rate_prediction > 20 ? "High" : "Moderate"} 
+                      color={latestPrediction.growth_rate_prediction > 20 ? "error" : "warning"}
+                      size="small"
+                    />
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell>Model Confidence</TableCell>
+                  <TableCell align="right">
+                    {(latestPrediction.confidence * 100).toFixed(0)}%
+                  </TableCell>
+                  <TableCell>
+                    <Chip 
+                      label={getConfidenceColor(latestPrediction.confidence)} 
+                      color={getConfidenceColor(latestPrediction.confidence) as any}
+                      size="small"
+                    />
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAlertDialogOpen(false)}>
+            Close
+          </Button>
+          <Button variant="contained" onClick={onConfigureAlerts}>
+            Configure Alerts
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Status Bar */}
+      <Box sx={{ mt: 3, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
+        <Typography variant="caption" color="text.secondary">
+          Enhanced Predictions | Google Research Integration | 
+          Last Update: {format(parseISO(latestPrediction.timestamp), 'MMM dd, HH:mm:ss')} | 
+          FireSat Detections: {recentDetections.length} | 
+          Boundary Updates: {boundaryUpdates.length} |
+          Model: {latestPrediction.model_version}
+        </Typography>
+      </Box>
+    </Box>
+  );
+};

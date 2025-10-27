@@ -1,0 +1,560 @@
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  Box,
+  Paper,
+  Typography,
+  Alert,
+  Chip,
+  Card,
+  CardContent,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Grid,
+} from '@mui/material';
+import {
+  LocalFireDepartment,
+  Warning,
+  Speed,
+  Thermostat,
+  Air,
+} from '@mui/icons-material';
+
+// Fire spread prediction model interface
+interface FireSpreadModel {
+  calculateSpread(
+    fireLocation: { lat: number; lng: number },
+    windSpeed: number,
+    windDirection: number,
+    fuelLoad: number,
+    slope: number,
+    humidity: number,
+    temperature: number,
+    timeHours: number
+  ): { lat: number; lng: number; confidence: number }[];
+}
+
+// Simplified Rothermel-based fire spread model
+class RothermelFireSpreadModel implements FireSpreadModel {
+  calculateSpread(
+    fireLocation: { lat: number; lng: number },
+    windSpeed: number,
+    windDirection: number,
+    fuelLoad: number,
+    slope: number,
+    humidity: number,
+    temperature: number,
+    timeHours: number
+  ): { lat: number; lng: number; confidence: number }[] {
+
+    // Convert wind direction to radians
+    const windDirectionRad = (windDirection * Math.PI) / 180;
+
+    // Base spread rate calculation (simplified Rothermel model)
+    const windFactor = 1 + (windSpeed / 10); // Wind increases spread rate
+    const fuelFactor = fuelLoad / 10; // Fuel load affects spread
+    const moistureFactor = Math.max(0.1, 1 - (humidity / 100)); // Lower humidity = faster spread
+    const temperatureFactor = 1 + ((temperature - 70) / 100); // Higher temp = faster spread
+    const slopeFactor = 1 + (Math.abs(slope) / 45); // Slope affects spread
+
+    // Base spread rate in miles per hour
+    const baseSpreadRate = 0.5; // Conservative base rate
+    const spreadRate = baseSpreadRate * windFactor * fuelFactor * moistureFactor * temperatureFactor * slopeFactor;
+
+    // Calculate elliptical spread pattern
+    const predictions: { lat: number; lng: number; confidence: number }[] = [];
+
+    // Generate prediction points in elliptical pattern
+    const maxDistance = spreadRate * timeHours; // Total distance in miles
+    const ellipseRatio = 3; // Length/width ratio for wind-driven fires
+
+    for (let angle = 0; angle < 360; angle += 15) {
+      const angleRad = (angle * Math.PI) / 180;
+
+      // Calculate distance based on wind direction (elliptical pattern)
+      const alignmentWithWind = Math.cos(angleRad - windDirectionRad);
+      const distanceMultiplier = 1 + (ellipseRatio - 1) * Math.max(0, alignmentWithWind);
+      const distance = maxDistance * distanceMultiplier / ellipseRatio;
+
+      // Convert distance to lat/lng offset (rough approximation)
+      const latOffset = (distance * Math.cos(angleRad)) / 69; // 69 miles per degree latitude
+      const lngOffset = (distance * Math.sin(angleRad)) / (69 * Math.cos(fireLocation.lat * Math.PI / 180));
+
+      // Calculate confidence based on various factors
+      const timeConfidence = Math.max(0.3, 1 - (timeHours / 48)); // Confidence decreases over time
+      const windConfidence = Math.min(1, windSpeed / 20); // Higher wind = higher confidence
+      const dataConfidence = 0.8; // Base confidence in input data
+
+      const overallConfidence = timeConfidence * windConfidence * dataConfidence;
+
+      predictions.push({
+        lat: fireLocation.lat + latOffset,
+        lng: fireLocation.lng + lngOffset,
+        confidence: Math.round(overallConfidence * 100) / 100
+      });
+    }
+
+    return predictions;
+  }
+}
+
+interface InteractiveFireMapProps {
+  activeFires: any[];
+  windData: any[];
+  weatherData: any[];
+  selectedLayers: any;
+  timeHours: number;
+  mapCenter: number[];
+  mapZoom: number;
+}
+
+const InteractiveFireMap: React.FC<InteractiveFireMapProps> = ({
+  activeFires,
+  windData,
+  weatherData,
+  selectedLayers,
+  timeHours,
+  mapCenter,
+  mapZoom
+}) => {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const [selectedFire, setSelectedFire] = useState<any>(null);
+  const [fireSpreadModel] = useState(new RothermelFireSpreadModel());
+  const [spreadPredictions, setSpreadPredictions] = useState<any[]>([]);
+  const [showPredictionDialog, setShowPredictionDialog] = useState(false);
+
+  useEffect(() => {
+    if (selectedLayers.predictions && activeFires.length > 0) {
+      calculateFireSpreadPredictions();
+    }
+  }, [activeFires, timeHours, selectedLayers.predictions]);
+
+  const calculateFireSpreadPredictions = () => {
+    const predictions: any[] = [];
+
+    activeFires.forEach(fire => {
+      // Get nearest wind/weather data (simplified)
+      const windSpeed = 25; // mph - from NOAA HRRR
+      const windDirection = 45; // degrees - from NOAA HRRR
+      const temperature = 92; // °F - from weather data
+      const humidity = 8; // % - from weather data
+      const fuelLoad = 7; // 1-10 scale - from vegetation analysis
+      const slope = 15; // degrees - from DEM data
+
+      const spreadPoints = fireSpreadModel.calculateSpread(
+        { lat: fire.latitude, lng: fire.longitude },
+        windSpeed,
+        windDirection,
+        fuelLoad,
+        slope,
+        humidity,
+        temperature,
+        timeHours || 1
+      );
+
+      predictions.push({
+        fireId: fire.id,
+        fireName: fire.name || `Fire ${fire.id}`,
+        originalLocation: { lat: fire.latitude, lng: fire.longitude },
+        predictions: spreadPoints,
+        metadata: {
+          windSpeed,
+          windDirection,
+          temperature,
+          humidity,
+          timeHours: timeHours || 1,
+          confidence: spreadPoints.reduce((sum, p) => sum + p.confidence, 0) / spreadPoints.length
+        }
+      });
+    });
+
+    setSpreadPredictions(predictions);
+  };
+
+  const handleFireClick = (fire: any) => {
+    setSelectedFire(fire);
+    setShowPredictionDialog(true);
+  };
+
+  const getIntensityColor = (intensity: string) => {
+    switch (intensity) {
+      case 'Extreme': return '#8B0000'; // Dark red
+      case 'High': return '#FF4500'; // Orange red
+      case 'Moderate': return '#FFA500'; // Orange
+      case 'Low': return '#FFD700'; // Gold
+      default: return '#FF6B6B';
+    }
+  };
+
+  const getConfidenceColor = (confidence: number) => {
+    if (confidence >= 0.8) return '#4CAF50'; // Green
+    if (confidence >= 0.6) return '#FF9800'; // Orange
+    return '#F44336'; // Red
+  };
+
+  // Mock wind vectors for visualization
+  const generateWindVectors = () => {
+    const vectors = [];
+    const step = 0.1; // Degree step for vector grid
+
+    for (let lat = mapCenter[0] - 0.5; lat <= mapCenter[0] + 0.5; lat += step) {
+      for (let lng = mapCenter[1] - 0.5; lng <= mapCenter[1] + 0.5; lng += step) {
+        // Simulate wind data - in production, this comes from NOAA HRRR
+        const windSpeed = 20 + Math.random() * 20; // 20-40 mph
+        const windDirection = 45 + (Math.random() - 0.5) * 30; // ~45° ± 15°
+
+        vectors.push({
+          lat,
+          lng,
+          speed: windSpeed,
+          direction: windDirection,
+          intensity: windSpeed > 30 ? 'High' : windSpeed > 20 ? 'Medium' : 'Low'
+        });
+      }
+    }
+
+    return vectors;
+  };
+
+  const windVectors = selectedLayers.windVectors ? generateWindVectors() : [];
+
+  return (
+    <Box sx={{ height: '100%', position: 'relative' }}>
+      {/* Map Container */}
+      <Box
+        ref={mapRef}
+        sx={{
+          height: '100%',
+          background: selectedLayers.temperature ? `
+            radial-gradient(circle at 15% 15%, rgba(139, 0, 0, 0.4) 0%, transparent 25%),
+            radial-gradient(circle at 85% 25%, rgba(255, 69, 0, 0.35) 0%, transparent 30%),
+            radial-gradient(circle at 60% 70%, rgba(255, 140, 0, 0.3) 0%, transparent 35%),
+            radial-gradient(circle at 25% 85%, rgba(255, 215, 0, 0.25) 0%, transparent 40%),
+            linear-gradient(135deg, #8B0000 0%, #FF4500 25%, #FFA500 50%, #FFD700 75%, #FFFF99 100%)
+          ` : selectedLayers.humidity ? `
+            radial-gradient(circle at 30% 20%, rgba(0, 100, 200, 0.3) 0%, transparent 40%),
+            radial-gradient(circle at 70% 60%, rgba(100, 150, 255, 0.25) 0%, transparent 35%),
+            radial-gradient(circle at 20% 80%, rgba(150, 200, 255, 0.2) 0%, transparent 30%),
+            linear-gradient(45deg, #003366 0%, #0066CC 25%, #3399FF 50%, #66CCFF 75%, #B3E5FF 100%)
+          ` : selectedLayers.vegetation ? `
+            radial-gradient(circle at 40% 30%, rgba(34, 139, 34, 0.4) 0%, transparent 35%),
+            radial-gradient(circle at 80% 70%, rgba(107, 142, 35, 0.35) 0%, transparent 40%),
+            radial-gradient(circle at 15% 75%, rgba(139, 69, 19, 0.3) 0%, transparent 30%),
+            linear-gradient(90deg, #228B22 0%, #32CD32 25%, #9ACD32 50%, #DAA520 75%, #8B4513 100%)
+          ` : `
+            radial-gradient(circle at 20% 20%, rgba(255, 100, 100, 0.1) 0%, transparent 50%),
+            radial-gradient(circle at 80% 60%, rgba(255, 150, 100, 0.15) 0%, transparent 50%),
+            radial-gradient(circle at 40% 80%, rgba(100, 200, 100, 0.1) 0%, transparent 50%),
+            linear-gradient(135deg, #2c3e2c 0%, #1e2f1e 50%, #0f1a0f 100%)
+          `,
+          position: 'relative',
+          overflow: 'hidden',
+          '&::before': selectedLayers.windVectors ? {
+            content: '""',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: `
+              repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 10px,
+                rgba(255, 255, 255, 0.1) 10px,
+                rgba(255, 255, 255, 0.1) 12px
+              )
+            `,
+            zIndex: 1
+          } : {}
+        }}
+      >
+        {/* Active Fires Visualization */}
+        {selectedLayers.activeFires && activeFires.map(fire => {
+          // Improved coordinate conversion based on viewport bounds
+          const viewportWidth = 2.0; // degrees longitude visible
+          const viewportHeight = 1.5; // degrees latitude visible
+
+          const x = ((fire.longitude - (mapCenter[1] - viewportWidth/2)) / viewportWidth) * 100;
+          const y = ((mapCenter[0] + viewportHeight/2 - fire.latitude) / viewportHeight) * 100;
+
+          if (x < 0 || x > 100 || y < 0 || y > 100) return null;
+
+          return (
+            <Box
+              key={fire.id}
+              onClick={() => handleFireClick(fire)}
+              sx={{
+                position: 'absolute',
+                left: `${x}%`,
+                top: `${y}%`,
+                transform: 'translate(-50%, -50%)',
+                cursor: 'pointer',
+                zIndex: 10
+              }}
+            >
+              <Box
+                sx={{
+                  width: Math.max(8, fire.frp || 20),
+                  height: Math.max(8, fire.frp || 20),
+                  borderRadius: '50%',
+                  background: getIntensityColor(fire.intensity),
+                  border: '2px solid white',
+                  boxShadow: '0 0 10px rgba(255, 0, 0, 0.6)',
+                  animation: 'pulse 2s infinite',
+                  '&:hover': {
+                    transform: 'scale(1.2)',
+                    transition: 'transform 0.2s'
+                  }
+                }}
+              />
+            </Box>
+          );
+        })}
+
+        {/* Wind Vectors */}
+        {selectedLayers.windVectors && windVectors.slice(0, 50).map((vector, index) => {
+          const viewportWidth = 2.0;
+          const viewportHeight = 1.5;
+          const x = ((vector.lng - (mapCenter[1] - viewportWidth/2)) / viewportWidth) * 100;
+          const y = ((mapCenter[0] + viewportHeight/2 - vector.lat) / viewportHeight) * 100;
+
+          if (x < 0 || x > 100 || y < 0 || y > 100) return null;
+
+          const length = Math.min(30, vector.speed / 2);
+
+          return (
+            <Box
+              key={`wind-${index}`}
+              sx={{
+                position: 'absolute',
+                left: `${x}%`,
+                top: `${y}%`,
+                transform: `translate(-50%, -50%) rotate(${vector.direction}deg)`,
+                zIndex: 5
+              }}
+            >
+              <Box
+                sx={{
+                  width: `${length}px`,
+                  height: '2px',
+                  backgroundColor: vector.intensity === 'High' ? '#FF4444' :
+                                 vector.intensity === 'Medium' ? '#FFA500' : '#44AAFF',
+                  position: 'relative',
+                  '&::after': {
+                    content: '""',
+                    position: 'absolute',
+                    right: 0,
+                    top: '-2px',
+                    width: 0,
+                    height: 0,
+                    borderLeft: '6px solid',
+                    borderTop: '3px solid transparent',
+                    borderBottom: '3px solid transparent',
+                    borderLeftColor: 'inherit'
+                  }
+                }}
+              />
+            </Box>
+          );
+        })}
+
+        {/* Fire Spread Predictions */}
+        {selectedLayers.predictions && spreadPredictions.map(prediction =>
+          prediction.predictions.map((point: any, index: number) => {
+            const viewportWidth = 2.0;
+            const viewportHeight = 1.5;
+            const x = ((point.lng - (mapCenter[1] - viewportWidth/2)) / viewportWidth) * 100;
+            const y = ((mapCenter[0] + viewportHeight/2 - point.lat) / viewportHeight) * 100;
+
+            if (x < 0 || x > 100 || y < 0 || y > 100) return null;
+
+            return (
+              <Box
+                key={`pred-${prediction.fireId}-${index}`}
+                sx={{
+                  position: 'absolute',
+                  left: `${x}%`,
+                  top: `${y}%`,
+                  transform: 'translate(-50%, -50%)',
+                  zIndex: 3
+                }}
+              >
+                <Box
+                  sx={{
+                    width: 4,
+                    height: 4,
+                    borderRadius: '50%',
+                    backgroundColor: getConfidenceColor(point.confidence),
+                    opacity: point.confidence * 0.8,
+                    border: '1px solid rgba(255, 255, 255, 0.3)'
+                  }}
+                />
+              </Box>
+            );
+          })
+        )}
+
+        {/* Map Labels and Info */}
+        <Paper sx={{ position: 'absolute', top: 16, left: 16, p: 2, maxWidth: 300 }}>
+          <Typography variant="h6" gutterBottom>
+            Live Fire Intelligence
+          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Typography variant="body2">
+              📍 Active Fires: {activeFires.length}
+            </Typography>
+            {timeHours > 0 && (
+              <Typography variant="body2">
+                ⏱️ Prediction: +{timeHours} hour{timeHours > 1 ? 's' : ''}
+              </Typography>
+            )}
+            <Typography variant="body2">
+              🌬️ Wind: 25 mph NE (sustained), 40 mph gusts
+            </Typography>
+            <Typography variant="body2">
+              🌡️ Conditions: 92°F, 8% RH (Red Flag Warning)
+            </Typography>
+          </Box>
+        </Paper>
+
+        {/* Critical Alert Banner */}
+        {activeFires.some(f => f.intensity === 'Extreme') && (
+          <Alert
+            severity="error"
+            sx={{
+              position: 'absolute',
+              top: 16,
+              right: 16,
+              maxWidth: 400,
+              animation: 'pulse 2s infinite'
+            }}
+          >
+            <Typography variant="body2">
+              <strong>EXTREME FIRE BEHAVIOR DETECTED</strong><br />
+              Multiple fires showing rapid expansion under Red Flag conditions.
+            </Typography>
+          </Alert>
+        )}
+      </Box>
+
+      {/* Fire Details Dialog */}
+      <Dialog
+        open={showPredictionDialog}
+        onClose={() => setShowPredictionDialog(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <LocalFireDepartment color="error" />
+            Fire Spread Analysis
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {selectedFire && (
+            <Grid container spacing={3}>
+              <Grid item xs={12} md={6}>
+                <Card>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom>
+                      Current Fire Data
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <Typography variant="body2">
+                        <strong>Location:</strong> {(selectedFire.latitude || 0).toFixed(4)}, {(selectedFire.longitude || 0).toFixed(4)}
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Brightness:</strong> {selectedFire.brightness}K
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Confidence:</strong> {selectedFire.confidence}%
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Fire Radiative Power:</strong> {selectedFire.frp} MW
+                      </Typography>
+                      <Chip
+                        label={selectedFire.intensity}
+                        color={selectedFire.intensity === 'Extreme' ? 'error' : 'warning'}
+                        sx={{ alignSelf: 'flex-start' }}
+                      />
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <Card>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom>
+                      Spread Prediction Model
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Air color="primary" />
+                        <Typography variant="body2">
+                          Wind: 25 mph @ 45° NE
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Thermostat color="error" />
+                        <Typography variant="body2">
+                          Temp: 92°F, Humidity: 8%
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Speed color="warning" />
+                        <Typography variant="body2">
+                          Predicted Rate: 0.8-2.1 mph
+                        </Typography>
+                      </Box>
+                      {spreadPredictions.find(p => p.fireId === selectedFire.id) && (
+                        <Typography variant="body2">
+                          <strong>Model Confidence:</strong> {
+                            Math.round(spreadPredictions.find(p => p.fireId === selectedFire.id)?.metadata.confidence * 100)
+                          }%
+                        </Typography>
+                      )}
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              <Grid item xs={12}>
+                <Alert severity="warning">
+                  <Typography variant="body2">
+                    <strong>Fire Spread Prediction:</strong> Based on current wind patterns, fuel moisture,
+                    and topography, this fire is predicted to spread primarily in the northeast direction.
+                    Communities in the projected path should be prepared for potential evacuation.
+                  </Typography>
+                </Alert>
+              </Grid>
+            </Grid>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowPredictionDialog(false)}>
+            Close
+          </Button>
+          <Button variant="contained" color="error">
+            Issue Evacuation Advisory
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <style>
+        {`
+          @keyframes pulse {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.1); }
+            100% { opacity: 1; transform: scale(1); }
+          }
+        `}
+      </style>
+    </Box>
+  );
+};
+
+export default InteractiveFireMap;

@@ -1,0 +1,991 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Box,
+  Paper,
+  Typography,
+  Grid,
+  Card,
+  CardContent,
+  CardHeader,
+  CardActions,
+  Button,
+  TextField,
+  InputAdornment,
+  Chip,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Alert,
+  Tabs,
+  Tab,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemIcon,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  Breadcrumbs,
+  Link,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Rating,
+  Tooltip,
+  Badge,
+  Divider,
+  LinearProgress,
+} from '@mui/material';
+import {
+  Search,
+  Folder,
+  InsertDriveFile,
+  Visibility,
+  Download,
+  Share,
+  Star,
+  StarBorder,
+  Info,
+  Schedule,
+  Storage,
+  Assessment,
+  CloudDownload,
+  Timeline,
+  Map,
+  Satellite,
+  Thermostat,
+  Sensors,
+  ExpandMore,
+  FilterList,
+  Sort,
+  BookmarkBorder,
+  Bookmark,
+  DataUsage,
+  Update,
+  Security,
+  VerifiedUser,
+  Warning,
+  CheckCircle,
+  Error,
+  Public,
+  Lock,
+  Group,
+  Person,
+  CalendarToday,
+  TrendingUp,
+  Code,
+  Api,
+  Description,
+} from '@mui/icons-material';
+
+interface Dataset {
+  id: string;
+  name: string;
+  description: string;
+  category: 'satellite' | 'weather' | 'historical' | 'realtime' | 'iot' | 'analysis';
+  source: string;
+  format: string;
+  size: string;
+  lastUpdated: string;
+  updateFrequency: string;
+  tags: string[];
+  rating: number;
+  downloads: number;
+  isFavorite: boolean;
+  isBookmarked: boolean;
+  access: 'public' | 'restricted' | 'private';
+  owner: string;
+  dataQuality: number;
+  schema: any;
+  lineage: string[];
+  usage: {
+    views: number;
+    downloads: number;
+    queries: number;
+  };
+}
+
+interface DataLineage {
+  id: string;
+  name: string;
+  type: 'source' | 'transformation' | 'output';
+  dependencies: string[];
+}
+
+const DataCatalogPage: React.FC = () => {
+  const [selectedTab, setSelectedTab] = useState(0);
+  const [datasets, setDatasets] = useState<Dataset[]>([]);
+  const [filteredDatasets, setFilteredDatasets] = useState<Dataset[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedAccess, setSelectedAccess] = useState('all');
+  const [sortBy, setSortBy] = useState('name');
+  const [selectedDataset, setSelectedDataset] = useState<Dataset | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [viewType, setViewType] = useState<'grid' | 'list'>('grid');
+
+  useEffect(() => {
+    // Mock datasets
+    const mockDatasets: Dataset[] = [
+      {
+        id: 'nasa-firms',
+        name: 'NASA FIRMS Fire Detection',
+        description: 'Real-time and near real-time fire detection data from MODIS and VIIRS satellites. Provides global fire hotspot information with confidence levels and brightness temperatures.',
+        category: 'satellite',
+        source: 'NASA/GSFC',
+        format: 'CSV, JSON, Shapefile',
+        size: '2.3 GB',
+        lastUpdated: '2024-09-14T10:30:00Z',
+        updateFrequency: 'Daily',
+        tags: ['fire', 'satellite', 'modis', 'viirs', 'hotspots'],
+        rating: 4.8,
+        downloads: 1250,
+        isFavorite: true,
+        isBookmarked: false,
+        access: 'public',
+        owner: 'NASA Earth Data',
+        dataQuality: 95,
+        schema: {
+          latitude: 'Float64',
+          longitude: 'Float64',
+          brightness: 'Int32',
+          confidence: 'Int32',
+          acq_date: 'DateTime',
+          satellite: 'String'
+        },
+        lineage: ['MODIS Terra/Aqua', 'VIIRS NPP/NOAA20', 'Fire Detection Algorithm'],
+        usage: {
+          views: 5420,
+          downloads: 1250,
+          queries: 892
+        }
+      },
+      {
+        id: 'weather-raws',
+        name: 'RAWS Weather Stations',
+        description: 'Remote Automatic Weather Station data including temperature, humidity, wind speed, wind direction, and precipitation measurements from CAL FIRE and partner agencies.',
+        category: 'weather',
+        source: 'CAL FIRE/NIFC',
+        format: 'CSV, XML',
+        size: '850 MB',
+        lastUpdated: '2024-09-14T09:45:00Z',
+        updateFrequency: 'Hourly',
+        tags: ['weather', 'temperature', 'humidity', 'wind', 'precipitation'],
+        rating: 4.6,
+        downloads: 892,
+        isFavorite: false,
+        isBookmarked: true,
+        access: 'public',
+        owner: 'CAL FIRE Meteorology',
+        dataQuality: 88,
+        schema: {
+          station_id: 'String',
+          timestamp: 'DateTime',
+          temperature: 'Float32',
+          humidity: 'Float32',
+          wind_speed: 'Float32',
+          wind_direction: 'Int32'
+        },
+        lineage: ['RAWS Stations', 'Quality Control', 'Data Validation'],
+        usage: {
+          views: 3210,
+          downloads: 892,
+          queries: 645
+        }
+      },
+      {
+        id: 'historical-perimeters',
+        name: 'Historical Fire Perimeters',
+        description: 'California fire perimeter boundaries from 1878 to present. Includes final fire boundaries, burn severity classifications, and associated metadata for analysis and planning.',
+        category: 'historical',
+        source: 'CAL FIRE FRAP',
+        format: 'Shapefile, GeoJSON, KML',
+        size: '1.2 GB',
+        lastUpdated: '2024-09-01T00:00:00Z',
+        updateFrequency: 'Monthly',
+        tags: ['fire', 'perimeters', 'boundaries', 'historical', 'gis'],
+        rating: 4.9,
+        downloads: 2100,
+        isFavorite: true,
+        isBookmarked: true,
+        access: 'public',
+        owner: 'CAL FIRE FRAP Unit',
+        dataQuality: 92,
+        schema: {
+          fire_name: 'String',
+          fire_year: 'Int32',
+          acres: 'Float64',
+          cause: 'String',
+          geometry: 'Polygon'
+        },
+        lineage: ['Fire Reports', 'GIS Digitization', 'Quality Assurance'],
+        usage: {
+          views: 8950,
+          downloads: 2100,
+          queries: 1230
+        }
+      },
+      {
+        id: 'iot-sensors',
+        name: 'IoT Fire Sensor Network',
+        description: 'Real-time data from distributed IoT sensors monitoring smoke particulates, temperature, humidity, and air quality across high-risk fire zones.',
+        category: 'iot',
+        source: 'CAL FIRE IoT Program',
+        format: 'JSON, MQTT Stream',
+        size: '450 MB',
+        lastUpdated: '2024-09-14T10:35:00Z',
+        updateFrequency: 'Real-time',
+        tags: ['iot', 'sensors', 'smoke', 'air-quality', 'real-time'],
+        rating: 4.2,
+        downloads: 320,
+        isFavorite: false,
+        isBookmarked: false,
+        access: 'restricted',
+        owner: 'CAL FIRE Technology Division',
+        dataQuality: 76,
+        schema: {
+          sensor_id: 'String',
+          timestamp: 'DateTime',
+          pm25: 'Float32',
+          temperature: 'Float32',
+          humidity: 'Float32',
+          battery_level: 'Float32'
+        },
+        lineage: ['IoT Sensors', 'Data Aggregation', 'Real-time Processing'],
+        usage: {
+          views: 1580,
+          downloads: 320,
+          queries: 445
+        }
+      },
+      {
+        id: 'landsat-ndvi',
+        name: 'Landsat NDVI Time Series',
+        description: 'Normalized Difference Vegetation Index derived from Landsat satellite imagery. Provides vegetation health monitoring and drought stress indicators.',
+        category: 'satellite',
+        source: 'USGS/Landsat',
+        format: 'GeoTIFF, NetCDF',
+        size: '3.8 GB',
+        lastUpdated: '2024-09-10T15:00:00Z',
+        updateFrequency: '16-day cycle',
+        tags: ['vegetation', 'ndvi', 'landsat', 'drought', 'monitoring'],
+        rating: 4.5,
+        downloads: 680,
+        isFavorite: false,
+        isBookmarked: false,
+        access: 'public',
+        owner: 'USGS Earth Resources',
+        dataQuality: 89,
+        schema: {
+          date: 'DateTime',
+          ndvi_value: 'Float32',
+          pixel_qa: 'Int16',
+          geometry: 'Raster'
+        },
+        lineage: ['Landsat 8/9', 'Atmospheric Correction', 'NDVI Calculation'],
+        usage: {
+          views: 2340,
+          downloads: 680,
+          queries: 298
+        }
+      },
+      {
+        id: 'fire-risk-model',
+        name: 'CAL FIRE Risk Assessment Model',
+        description: 'Proprietary fire risk assessment model results combining weather, fuel moisture, topography, and historical fire patterns to generate daily risk maps.',
+        category: 'analysis',
+        source: 'CAL FIRE Intelligence',
+        format: 'GeoTIFF, CSV',
+        size: '620 MB',
+        lastUpdated: '2024-09-14T06:00:00Z',
+        updateFrequency: 'Daily',
+        tags: ['risk', 'modeling', 'prediction', 'analysis', 'proprietary'],
+        rating: 4.7,
+        downloads: 445,
+        isFavorite: true,
+        isBookmarked: true,
+        access: 'private',
+        owner: 'CAL FIRE Intelligence Unit',
+        dataQuality: 94,
+        schema: {
+          date: 'DateTime',
+          risk_level: 'String',
+          risk_score: 'Float32',
+          confidence: 'Float32',
+          geometry: 'Polygon'
+        },
+        lineage: ['Weather Data', 'Fuel Moisture', 'Risk Model', 'Validation'],
+        usage: {
+          views: 4200,
+          downloads: 445,
+          queries: 780
+        }
+      }
+    ];
+
+    setDatasets(mockDatasets);
+    setFilteredDatasets(mockDatasets);
+  }, []);
+
+  useEffect(() => {
+    let filtered = datasets.filter(dataset => {
+      const matchesSearch = dataset.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          dataset.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          dataset.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
+
+      const matchesCategory = selectedCategory === 'all' || dataset.category === selectedCategory;
+      const matchesAccess = selectedAccess === 'all' || dataset.access === selectedAccess;
+
+      return matchesSearch && matchesCategory && matchesAccess;
+    });
+
+    // Sort datasets
+    filtered.sort((a, b) => {
+      switch (sortBy) {
+        case 'name':
+          return a.name.localeCompare(b.name);
+        case 'updated':
+          return new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime();
+        case 'downloads':
+          return b.downloads - a.downloads;
+        case 'rating':
+          return b.rating - a.rating;
+        default:
+          return 0;
+      }
+    });
+
+    setFilteredDatasets(filtered);
+  }, [datasets, searchTerm, selectedCategory, selectedAccess, sortBy]);
+
+  const getCategoryIcon = (category: string) => {
+    switch (category) {
+      case 'satellite': return <Satellite />;
+      case 'weather': return <Thermostat />;
+      case 'historical': return <Schedule />;
+      case 'realtime': return <Timeline />;
+      case 'iot': return <Sensors />;
+      case 'analysis': return <Assessment />;
+      default: return <InsertDriveFile />;
+    }
+  };
+
+  const getCategoryColor = (category: string) => {
+    switch (category) {
+      case 'satellite': return 'primary';
+      case 'weather': return 'info';
+      case 'historical': return 'secondary';
+      case 'realtime': return 'success';
+      case 'iot': return 'warning';
+      case 'analysis': return 'error';
+      default: return 'default';
+    }
+  };
+
+  const getAccessIcon = (access: string) => {
+    switch (access) {
+      case 'public': return <Public />;
+      case 'restricted': return <Group />;
+      case 'private': return <Lock />;
+      default: return <Public />;
+    }
+  };
+
+  const getQualityColor = (quality: number) => {
+    if (quality >= 90) return 'success';
+    if (quality >= 75) return 'warning';
+    return 'error';
+  };
+
+  const toggleFavorite = (datasetId: string) => {
+    setDatasets(prev => prev.map(dataset =>
+      dataset.id === datasetId ? { ...dataset, isFavorite: !dataset.isFavorite } : dataset
+    ));
+  };
+
+  const toggleBookmark = (datasetId: string) => {
+    setDatasets(prev => prev.map(dataset =>
+      dataset.id === datasetId ? { ...dataset, isBookmarked: !dataset.isBookmarked } : dataset
+    ));
+  };
+
+  const handleViewDetails = (dataset: Dataset) => {
+    setSelectedDataset(dataset);
+    setDetailsOpen(true);
+  };
+
+  const TabPanel = ({ children, value, index }: { children: React.ReactNode, value: number, index: number }) => (
+    <div hidden={value !== index}>
+      {value === index && <Box sx={{ pt: 2 }}>{children}</Box>}
+    </div>
+  );
+
+  return (
+    <Box sx={{ p: 3 }}>
+      {/* Header */}
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h4" gutterBottom>
+          Data Catalog
+        </Typography>
+        <Typography variant="subtitle1" color="text.secondary">
+          Centralized repository for datasets, metadata, and data lineage
+        </Typography>
+      </Box>
+
+      {/* Search and Filters */}
+      <Paper sx={{ p: 2, mb: 3 }}>
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs={12} md={4}>
+            <TextField
+              fullWidth
+              placeholder="Search datasets, tags, or descriptions..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Search />
+                  </InputAdornment>
+                ),
+              }}
+            />
+          </Grid>
+
+          <Grid item xs={12} md={2}>
+            <FormControl fullWidth>
+              <InputLabel>Category</InputLabel>
+              <Select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                label="Category"
+              >
+                <MenuItem value="all">All Categories</MenuItem>
+                <MenuItem value="satellite">Satellite</MenuItem>
+                <MenuItem value="weather">Weather</MenuItem>
+                <MenuItem value="historical">Historical</MenuItem>
+                <MenuItem value="realtime">Real-time</MenuItem>
+                <MenuItem value="iot">IoT Sensors</MenuItem>
+                <MenuItem value="analysis">Analysis</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+
+          <Grid item xs={12} md={2}>
+            <FormControl fullWidth>
+              <InputLabel>Access</InputLabel>
+              <Select
+                value={selectedAccess}
+                onChange={(e) => setSelectedAccess(e.target.value)}
+                label="Access"
+              >
+                <MenuItem value="all">All Access Levels</MenuItem>
+                <MenuItem value="public">Public</MenuItem>
+                <MenuItem value="restricted">Restricted</MenuItem>
+                <MenuItem value="private">Private</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+
+          <Grid item xs={12} md={2}>
+            <FormControl fullWidth>
+              <InputLabel>Sort By</InputLabel>
+              <Select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                label="Sort By"
+              >
+                <MenuItem value="name">Name</MenuItem>
+                <MenuItem value="updated">Last Updated</MenuItem>
+                <MenuItem value="downloads">Downloads</MenuItem>
+                <MenuItem value="rating">Rating</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+
+          <Grid item xs={12} md={2}>
+            <Typography variant="body2" color="text.secondary">
+              {filteredDatasets.length} datasets found
+            </Typography>
+          </Grid>
+        </Grid>
+      </Paper>
+
+      {/* Tabs */}
+      <Paper sx={{ mb: 3 }}>
+        <Tabs value={selectedTab} onChange={(e, newValue) => setSelectedTab(newValue)}>
+          <Tab icon={<Storage />} label="Browse Datasets" />
+          <Tab icon={<Star />} label="Favorites" />
+          <Tab icon={<DataUsage />} label="Data Lineage" />
+          <Tab icon={<Assessment />} label="Usage Analytics" />
+        </Tabs>
+      </Paper>
+
+      {/* Browse Datasets Tab */}
+      <TabPanel value={selectedTab} index={0}>
+        <Grid container spacing={3}>
+          {filteredDatasets.map((dataset) => (
+            <Grid item xs={12} md={6} lg={4} key={dataset.id}>
+              <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                <CardHeader
+                  avatar={getCategoryIcon(dataset.category)}
+                  title={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography variant="h6" sx={{ flexGrow: 1 }}>
+                        {dataset.name}
+                      </Typography>
+                      {getAccessIcon(dataset.access)}
+                    </Box>
+                  }
+                  subheader={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+                      <Chip
+                        label={dataset.category.toUpperCase()}
+                        color={getCategoryColor(dataset.category) as any}
+                        size="small"
+                      />
+                      <Rating value={dataset.rating} readOnly size="small" precision={0.1} />
+                    </Box>
+                  }
+                  action={
+                    <Box>
+                      <IconButton onClick={() => toggleFavorite(dataset.id)}>
+                        {dataset.isFavorite ? <Star color="warning" /> : <StarBorder />}
+                      </IconButton>
+                      <IconButton onClick={() => toggleBookmark(dataset.id)}>
+                        {dataset.isBookmarked ? <Bookmark color="primary" /> : <BookmarkBorder />}
+                      </IconButton>
+                    </Box>
+                  }
+                />
+
+                <CardContent sx={{ flexGrow: 1 }}>
+                  <Typography variant="body2" paragraph>
+                    {dataset.description.length > 120
+                      ? dataset.description.substring(0, 120) + '...'
+                      : dataset.description
+                    }
+                  </Typography>
+
+                  <Box sx={{ mb: 2 }}>
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      Data Quality
+                    </Typography>
+                    <LinearProgress
+                      variant="determinate"
+                      value={dataset.dataQuality}
+                      color={getQualityColor(dataset.dataQuality)}
+                      sx={{ height: 6, borderRadius: 3 }}
+                    />
+                    <Typography variant="caption" color="text.secondary">
+                      {dataset.dataQuality}% quality score
+                    </Typography>
+                  </Box>
+
+                  <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 2 }}>
+                    {dataset.tags.slice(0, 3).map((tag) => (
+                      <Chip key={tag} label={tag} size="small" variant="outlined" />
+                    ))}
+                    {dataset.tags.length > 3 && (
+                      <Chip label={`+${dataset.tags.length - 3} more`} size="small" variant="outlined" />
+                    )}
+                  </Box>
+
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    Updated: {new Date(dataset.lastUpdated).toLocaleDateString()}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    Size: {dataset.size} * Downloads: {dataset.downloads.toLocaleString()}
+                  </Typography>
+                </CardContent>
+
+                <CardActions>
+                  <Button
+                    size="small"
+                    startIcon={<Visibility />}
+                    onClick={() => handleViewDetails(dataset)}
+                  >
+                    Details
+                  </Button>
+                  <Button size="small" startIcon={<Download />}>
+                    Download
+                  </Button>
+                  <Button size="small" startIcon={<Share />}>
+                    Share
+                  </Button>
+                </CardActions>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      </TabPanel>
+
+      {/* Favorites Tab */}
+      <TabPanel value={selectedTab} index={1}>
+        <Grid container spacing={3}>
+          {datasets.filter(d => d.isFavorite).map((dataset) => (
+            <Grid item xs={12} key={dataset.id}>
+              <Card>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      {getCategoryIcon(dataset.category)}
+                      <Star color="warning" />
+                    </Box>
+                    <Box sx={{ flexGrow: 1 }}>
+                      <Typography variant="h6" gutterBottom>
+                        {dataset.name}
+                      </Typography>
+                      <Typography variant="body2" paragraph>
+                        {dataset.description}
+                      </Typography>
+                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                        <Chip
+                          label={dataset.category.toUpperCase()}
+                          color={getCategoryColor(dataset.category) as any}
+                          size="small"
+                        />
+                        <Rating value={dataset.rating} readOnly size="small" precision={0.1} />
+                        <Typography variant="caption" color="text.secondary">
+                          {dataset.downloads.toLocaleString()} downloads
+                        </Typography>
+                      </Box>
+                    </Box>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Button startIcon={<Visibility />} onClick={() => handleViewDetails(dataset)}>
+                        View
+                      </Button>
+                      <Button startIcon={<Download />}>
+                        Download
+                      </Button>
+                    </Box>
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      </TabPanel>
+
+      {/* Data Lineage Tab */}
+      <TabPanel value={selectedTab} index={2}>
+        <Paper sx={{ p: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            Data Lineage Visualization
+          </Typography>
+          <Typography variant="body2" color="text.secondary" paragraph>
+            Interactive visualization showing data flow and dependencies between datasets.
+          </Typography>
+
+          <Box
+            sx={{
+              height: 400,
+              border: 1,
+              borderColor: 'divider',
+              borderRadius: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              bgcolor: 'grey.50'
+            }}
+          >
+            <Box sx={{ textAlign: 'center' }}>
+              <DataUsage sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
+              <Typography variant="h6" color="text.secondary">
+                Data Lineage Graph
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Interactive flow diagram showing data sources, transformations, and outputs
+              </Typography>
+            </Box>
+          </Box>
+
+          <Grid container spacing={2} sx={{ mt: 2 }}>
+            <Grid item xs={12} md={4}>
+              <Typography variant="subtitle2" gutterBottom>Data Sources</Typography>
+              <List dense>
+                <ListItem>
+                  <ListItemIcon><Satellite fontSize="small" /></ListItemIcon>
+                  <ListItemText primary="MODIS/VIIRS Satellites" secondary="Raw fire detection data" />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon><Thermostat fontSize="small" /></ListItemIcon>
+                  <ListItemText primary="RAWS Weather Stations" secondary="Meteorological data" />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon><Sensors fontSize="small" /></ListItemIcon>
+                  <ListItemText primary="IoT Sensor Network" secondary="Ground-based sensors" />
+                </ListItem>
+              </List>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <Typography variant="subtitle2" gutterBottom>Processing Steps</Typography>
+              <List dense>
+                <ListItem>
+                  <ListItemIcon><Code fontSize="small" /></ListItemIcon>
+                  <ListItemText primary="Data Validation" secondary="Quality control checks" />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon><Api fontSize="small" /></ListItemIcon>
+                  <ListItemText primary="ETL Processing" secondary="Extract, transform, load" />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon><Assessment fontSize="small" /></ListItemIcon>
+                  <ListItemText primary="Analysis Models" secondary="Risk assessment algorithms" />
+                </ListItem>
+              </List>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <Typography variant="subtitle2" gutterBottom>Outputs</Typography>
+              <List dense>
+                <ListItem>
+                  <ListItemIcon><Map fontSize="small" /></ListItemIcon>
+                  <ListItemText primary="Risk Maps" secondary="Daily fire risk assessments" />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon><Timeline fontSize="small" /></ListItemIcon>
+                  <ListItemText primary="Trend Analysis" secondary="Historical patterns" />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon><Warning fontSize="small" /></ListItemIcon>
+                  <ListItemText primary="Alert System" secondary="Automated notifications" />
+                </ListItem>
+              </List>
+            </Grid>
+          </Grid>
+        </Paper>
+      </TabPanel>
+
+      {/* Usage Analytics Tab */}
+      <TabPanel value={selectedTab} index={3}>
+        <Grid container spacing={3}>
+          <Grid item xs={12} md={8}>
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="h6" gutterBottom>
+                Dataset Usage Trends
+              </Typography>
+              <Box
+                sx={{
+                  height: 300,
+                  border: 1,
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  bgcolor: 'grey.50'
+                }}
+              >
+                <Box sx={{ textAlign: 'center' }}>
+                  <TrendingUp sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
+                  <Typography variant="h6" color="text.secondary">
+                    Usage Analytics Chart
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Downloads, queries, and access patterns over time
+                  </Typography>
+                </Box>
+              </Box>
+            </Paper>
+          </Grid>
+
+          <Grid item xs={12} md={4}>
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="h6" gutterBottom>
+                Top Datasets
+              </Typography>
+              <List>
+                {datasets
+                  .sort((a, b) => b.downloads - a.downloads)
+                  .slice(0, 5)
+                  .map((dataset, index) => (
+                    <ListItem key={dataset.id} divider>
+                      <ListItemText
+                        primary={
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography variant="body2">#{index + 1}</Typography>
+                            <Typography variant="body2">{dataset.name}</Typography>
+                          </Box>
+                        }
+                        secondary={`${dataset.downloads.toLocaleString()} downloads`}
+                      />
+                    </ListItem>
+                  ))}
+              </List>
+            </Paper>
+          </Grid>
+        </Grid>
+      </TabPanel>
+
+      {/* Dataset Details Dialog */}
+      <Dialog
+        open={detailsOpen}
+        onClose={() => setDetailsOpen(false)}
+        maxWidth="lg"
+        fullWidth
+        PaperProps={{
+          sx: { height: '80vh' }
+        }}
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            {selectedDataset && getCategoryIcon(selectedDataset.category)}
+            <Typography variant="h6" sx={{ flexGrow: 1 }}>
+              {selectedDataset?.name}
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <IconButton onClick={() => selectedDataset && toggleFavorite(selectedDataset.id)}>
+                {selectedDataset?.isFavorite ? <Star color="warning" /> : <StarBorder />}
+              </IconButton>
+              <IconButton onClick={() => selectedDataset && toggleBookmark(selectedDataset.id)}>
+                {selectedDataset?.isBookmarked ? <Bookmark color="primary" /> : <BookmarkBorder />}
+              </IconButton>
+            </Box>
+          </Box>
+        </DialogTitle>
+
+        <DialogContent>
+          {selectedDataset && (
+            <Box>
+              <Grid container spacing={3}>
+                <Grid item xs={12} md={8}>
+                  <Typography variant="h6" gutterBottom>Description</Typography>
+                  <Typography variant="body1" paragraph>
+                    {selectedDataset.description}
+                  </Typography>
+
+                  <Typography variant="h6" gutterBottom>Schema</Typography>
+                  <TableContainer>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Field</TableCell>
+                          <TableCell>Type</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {Object.entries(selectedDataset.schema).map(([field, type]) => (
+                          <TableRow key={field}>
+                            <TableCell>{field}</TableCell>
+                            <TableCell>{type as string}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </Grid>
+
+                <Grid item xs={12} md={4}>
+                  <Typography variant="h6" gutterBottom>Metadata</Typography>
+                  <List dense>
+                    <ListItem>
+                      <ListItemText
+                        primary="Source"
+                        secondary={selectedDataset.source}
+                      />
+                    </ListItem>
+                    <ListItem>
+                      <ListItemText
+                        primary="Format"
+                        secondary={selectedDataset.format}
+                      />
+                    </ListItem>
+                    <ListItem>
+                      <ListItemText
+                        primary="Size"
+                        secondary={selectedDataset.size}
+                      />
+                    </ListItem>
+                    <ListItem>
+                      <ListItemText
+                        primary="Update Frequency"
+                        secondary={selectedDataset.updateFrequency}
+                      />
+                    </ListItem>
+                    <ListItem>
+                      <ListItemText
+                        primary="Last Updated"
+                        secondary={new Date(selectedDataset.lastUpdated).toLocaleString()}
+                      />
+                    </ListItem>
+                    <ListItem>
+                      <ListItemText
+                        primary="Data Quality"
+                        secondary={`${selectedDataset.dataQuality}%`}
+                      />
+                    </ListItem>
+                  </List>
+
+                  <Divider sx={{ my: 2 }} />
+
+                  <Typography variant="h6" gutterBottom>Usage Statistics</Typography>
+                  <List dense>
+                    <ListItem>
+                      <ListItemText
+                        primary="Views"
+                        secondary={selectedDataset.usage.views.toLocaleString()}
+                      />
+                    </ListItem>
+                    <ListItem>
+                      <ListItemText
+                        primary="Downloads"
+                        secondary={selectedDataset.usage.downloads.toLocaleString()}
+                      />
+                    </ListItem>
+                    <ListItem>
+                      <ListItemText
+                        primary="Queries"
+                        secondary={selectedDataset.usage.queries.toLocaleString()}
+                      />
+                    </ListItem>
+                  </List>
+                </Grid>
+              </Grid>
+
+              <Box sx={{ mt: 3 }}>
+                <Typography variant="h6" gutterBottom>Tags</Typography>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                  {selectedDataset.tags.map((tag) => (
+                    <Chip key={tag} label={tag} size="small" variant="outlined" />
+                  ))}
+                </Box>
+              </Box>
+
+              <Box sx={{ mt: 3 }}>
+                <Typography variant="h6" gutterBottom>Data Lineage</Typography>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                  {selectedDataset.lineage.map((item, index) => (
+                    <React.Fragment key={item}>
+                      <Chip label={item} size="small" />
+                      {index < selectedDataset.lineage.length - 1 && (
+                        <Typography sx={{ alignSelf: 'center' }}>{'→'}</Typography>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+
+        <DialogActions>
+          <Button onClick={() => setDetailsOpen(false)}>Close</Button>
+          <Button startIcon={<Share />}>Share</Button>
+          <Button startIcon={<Download />} variant="contained">
+            Download
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+};
+
+export default DataCatalogPage;
