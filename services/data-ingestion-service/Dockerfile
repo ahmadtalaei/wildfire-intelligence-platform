@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y \
     libgeos-dev \
     libsnappy-dev \
     libsnappy1v5 \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -40,6 +41,10 @@ COPY . .
 # Copy CDS API configuration to appuser home directory
 COPY .cdsapirc /home/appuser/.cdsapirc
 
+# Copy and make entrypoint executable
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 # Create necessary directories
 RUN mkdir -p /app/logs /app/data /app/temp && \
     chown -R appuser:appuser /app && \
@@ -55,5 +60,5 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
 # Expose port
 EXPOSE 8003
 
-# Command to run the application
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8003", "--reload"]
+# Use entrypoint script that creates tables then starts the app
+ENTRYPOINT ["/app/entrypoint.sh"]
